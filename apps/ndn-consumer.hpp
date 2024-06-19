@@ -23,16 +23,28 @@
 #include "ns3/ndnSIM/model/ndn-common.hpp"
 
 #include "ndn-app.hpp"
+#include "ModelData.hpp"
 
 #include "ns3/random-variable-stream.h"
 #include "ns3/nstime.h"
 #include "ns3/data-rate.h"
+#include "ns3/traced-value.h"
 
 #include "ns3/ndnSIM/model/ndn-common.hpp"
 #include "ns3/ndnSIM/utils/ndn-rtt-estimator.hpp"
+#include "ns3/ptr.h"
 
 #include <set>
 #include <map>
+#include <vector>
+#include <algorithm>
+#include <string>
+#include <numeric>
+#include <iostream>
+#include <sstream>
+#include <queue>
+#include <utility>
+#include <deque>
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/tag.hpp>
@@ -48,112 +60,154 @@ namespace ndn {
  */
 class Consumer : public App {
 public:
-  static TypeId
-  GetTypeId();
 
-  /**
-   * \brief Default constructor
-   * Sets up randomizer function and packet sequence number
-   */
-  Consumer();
-  virtual ~Consumer(){};
+    Consumer();
+    virtual ~Consumer(){};
 
-  // From App
-  virtual void
-  OnData(shared_ptr<const Data> contentObject);
 
-  // From App
-  virtual void
-  OnNack(shared_ptr<const lp::Nack> nack);
+    static TypeId GetTypeId();
 
-  /**
-   * @brief Timeout event
-   * @param sequenceNumber time outed sequence number
-   */
-  virtual void
-  OnTimeout(uint32_t sequenceNumber);
+    void TreeBroadcast();
 
-  /**
-   * @brief Actually send packet
-   */
-  void
-  SendPacket();
+    void ConstructAggregationTree();
 
-  /**
-   * @brief An event that is fired just before an Interest packet is actually send out (send is
-   *inevitable)
-   *
-   * The reason for "before" even is that in certain cases (when it is possible to satisfy from the
-   *local cache),
-   * the send call will immediately return data, and if "after" even was used, this after would be
-   *called after
-   * all processing of incoming data, potentially producing unexpected results.
-   */
-  virtual void
-  WillSendOutInterest(uint32_t sequenceNumber);
+    void ResponseTimeSum (int64_t response_time);
+
+    int64_t
+    GetResponseTimeAverage();
+
+    // Calculate aggregate time
+    void
+    AggregateTimeSum (int64_t response_time);
+
+    int64_t
+    GetAggregateTimeAverage();
+
+    virtual void
+    OnData(shared_ptr<const Data> contentObject);
+
+    virtual void
+    OnNack(shared_ptr<const lp::Nack> nack);
+
+    virtual void
+    OnTimeout(std::string nameString);
+
+    void
+    SendPacket();
+
+
+    Time RTTMeasurement(int64_t resTime);
+
+    // Aggregation
+    void aggregate(const ModelData& data, const std::string& dataName);
+
+    std::vector<float> getMean(const std::string& dataName);
+
 
 public:
-  typedef void (*LastRetransmittedInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, int32_t hopCount);
-  typedef void (*FirstInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, uint32_t retxCount, int32_t hopCount);
+    typedef void (*LastRetransmittedInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, int32_t hopCount);
+    typedef void (*FirstInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, uint32_t retxCount, int32_t hopCount);
 
 protected:
-  // from App
-  virtual void
-  StartApplication();
+    // from App
+    virtual void
+    StartApplication();
 
-  virtual void
-  StopApplication();
+    virtual void
+    StopApplication();
 
-  /**
-   * \brief Constructs the Interest packet and sends it using a callback to the underlying NDN
-   * protocol
-   */
-  virtual void
-  ScheduleNextPacket() = 0;
+    virtual void
+    ScheduleNextPacket() = 0;
 
-  /**
-   * \brief Checks if the packet need to be retransmitted becuase of retransmission timer expiration
-   */
-  void
-  CheckRetxTimeout();
+    virtual void
+    SendInterest(shared_ptr<Name> newName);
 
-  /**
-   * \brief Modifies the frequency of checking the retransmission timeouts
-   * \param retxTimer Timeout defining how frequent retransmission timeouts should be checked
-   */
-  void
-  SetRetxTimer(Time retxTimer);
+    void
+    CheckRetxTimeout();
 
-  /**
-   * \brief Returns the frequency of checking the retransmission timeouts
-   * \return Timeout defining how frequent retransmission timeouts should be checked
-   */
-  Time
-  GetRetxTimer() const;
+    void
+    SetRetxTimer(Time retxTimer);
+
+    Time
+    GetRetxTimer() const;
+
+public:
+    // Override the function in App class to return leaf nodes
+    std::map<std::string, std::set<std::string>>
+    getLeafNodes(const std::string& key,const std::map<std::string, std::vector<std::string>>& treeMap);
+
+
+
 
 protected:
-  Ptr<UniformRandomVariable> m_rand; ///< @brief nonce generator
+    // Global sequence number
+    uint32_t globalSeq;
+    int roundSendInterest;
 
-  uint32_t m_seq;      ///< @brief currently requested sequence number
-  uint32_t m_seqMax;   ///< @brief maximum number of sequence number
-  EventId m_sendEvent; ///< @brief EventId of pending "send packet" event
-  Time m_retxTimer;    ///< @brief Currently estimated retransmission timer
-  EventId m_retxEvent; ///< @brief Event to check whether or not retransmission should be performed
 
-  Ptr<RttEstimator> m_rtt; ///< @brief RTT estimator
+    // Get producer list
+    std::string proList;
 
-  Time m_offTime;          ///< \brief Time interval between packets
-  Name m_interestName;     ///< \brief NDN Name of the Interest (use Name)
-  Time m_interestLifeTime; ///< \brief LifeTime for interest packet
+    // Used in constructing aggregation Tree
+    std::vector<std::map<std::string, std::vector<std::string>>> aggregationTree;
+    std::vector<std::vector<std::string>> subTree;
 
-  /// @cond include_hidden
-  /**
-   * \struct This struct contains sequence numbers of packets to be retransmitted
-   */
-  struct RetxSeqsContainer : public std::set<uint32_t> {
-  };
+    // Check whether the aggregation has finished
+    std::map<uint32_t, std::vector<std::string>> map_agg_oldSeq_newName; // Manager name for a round within iteration
+    std::map<uint32_t, std::vector<std::string>> m_agg_newDataName; // Manage names for entire iteration
+    std::map<std::string, std::string> map_child_nameSec1;
 
-  RetxSeqsContainer m_retxSeqs; ///< \brief ordered set of sequence numbers to be retransmitted
+
+    // Timeout check/ RTT measurement
+    std::map<std::string, ns3::Time> m_timeoutCheck;
+    Time m_timeoutThreshold;
+    Time RTT_Timer;
+    uint64_t SmoothedRTT;
+    int roundRTT;
+
+
+    // Designed for actual aggregation operations
+    std::map<std::string, std::vector<float>> sumParameters;
+    int producerCount;
+
+
+    // defined for response time
+    std::map<std::string, ns3::Time> currentTime;
+    std::map<std::string, ns3::Time> responseTime;
+    int64_t total_response_time;
+    int round;
+
+    // defined for aggregation time
+    std::map<uint32_t, ns3::Time> aggregateStartTime;
+    std::map<uint32_t, ns3::Time> aggregateTime;
+    int64_t totalAggregateTime;
+    int iteration;
+
+
+
+    Ptr<UniformRandomVariable> m_rand; ///< @brief nonce generator
+    uint32_t m_seq;      ///< @brief currently requested sequence number
+    uint32_t m_seqMax;   ///< @brief maximum number of sequence number
+    EventId m_sendEvent; ///< @brief EventId of pending "send packet" event
+    Time m_retxTimer;    ///< @brief Currently estimated retransmission timer
+    EventId m_retxEvent; ///< @brief Event to check whether or not retransmission should be performed
+
+    Ptr<RttEstimator> m_rtt; ///< @brief RTT estimator
+
+    Time m_offTime;          ///< \brief Time interval between packets
+    Time m_interestLifeTime; ///< \brief LifeTime for interest packet
+
+    std::string m_interestName; // Consumer's interest prefix
+    std::string m_nodeprefix; // Consumer's node prefix
+
+    /// @cond include_hidden
+      /**
+    * \struct This struct contains sequence numbers of packets to be retransmitted
+    */
+    struct RetxSeqsContainer : public std::set<uint32_t> {
+    };
+
+    RetxSeqsContainer m_retxSeqs; ///< \brief ordered set of sequence numbers to be retransmitted
 
   /**
    * \struct This struct contains a pair of packet sequence number and its timeout
