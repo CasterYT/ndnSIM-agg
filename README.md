@@ -44,7 +44,7 @@ How to configure this customized ndnSIM project
     cd ndnSIM
     git clone https://github.com/named-data-ndnSIM/ns-3-dev.git ns-3
     git clone https://github.com/named-data-ndnSIM/pybindgen.git pybindgen
-    git clone --recursive https://github.com/CasterYT/ndnSIM.git ns-3/src/ndnSIM
+    git clone --recursive https://github.com/CasterYT/ndnSIM-complete.git ns-3/src/ndnSIM
     ```
 - Build ndnSIM
     ``` shell
@@ -71,7 +71,7 @@ How to configure this customized ndnSIM project
     ```shell
     cd src/ndnSIM
     git init
-    git remote set-url origin https://github.com/CasterYT/ndnSIM.git
+    git remote set-url origin https://github.com/CasterYT/ndnSIM-complete.git
   ```
   To check whether the remote link is set correctly
     ```shell
