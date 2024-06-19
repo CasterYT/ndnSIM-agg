@@ -61,7 +61,7 @@ How to configure this customized ndnSIM project
 
 ## Option 2: Run simulation for an existing ndnSIM project
 
-- Assume you've cloned the official github repository using the following
+- Assume you've cloned the official github repository using the following, if not, please refer to https://ndnsim.net/current/getting-started.html
     ```shell
     git clone https://github.com/named-data-ndnSIM/ns-3-dev.git ns-3
     git clone https://github.com/named-data-ndnSIM/pybindgen.git pybindgen
