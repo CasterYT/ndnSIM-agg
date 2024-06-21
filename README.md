@@ -15,20 +15,12 @@ How to configure this customized ndnSIM project
 - Build ndnSIM
     ``` shell
   cd ns-3
-  ./waf configure -d debug
+  ./waf configure --enable-examples -d debug
   ./waf
     ```
-- Make sure you're under `ns-3` directory, remove `scratch` folder
-  ```shell
-  rm -rf scratch
-  ```
-- Clone the scenario files to `scratch`
-  ```shell
-  git clone https://github.com/CasterYT/ndnSIM-scenario.git scratch
-  ```
 - Start simulation
     ```shell
-  NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator:ndn.Producer ./waf --run agg-aimd
+  NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator:ndn.Producer ./waf --run agg-aimd-test
     ```
 
 
@@ -54,24 +46,15 @@ How to configure this customized ndnSIM project
     ```shell
     git pull origin master
     ```
-
-- Now your ndnSIM's source code should be up to date, make sure you're under `ns-3` directory, remove `scratch` folder
-  ```shell
-  rm -rf scratch
-  ```
-- Clone the scenario files to `scratch`
-  ```shell
-  git clone https://github.com/CasterYT/ndnSIM-scenario.git scratch
-  ```
 - Re-build the entire project, go back to `ns-3` directory first
     ```shell
-    ./waf configure -d debug
+    ./waf configure --enable-examples -d debug
     ./waf
     ```
 
 - Start simulation
     ```shell
-  NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator:ndn.Producer ./waf --run agg-aimd
+  NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator:ndn.Producer ./waf --run agg-aimd-test
     ```
 
 
