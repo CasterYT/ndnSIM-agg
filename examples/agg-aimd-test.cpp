@@ -18,7 +18,7 @@ namespace ns3 {
         cmd.Parse(argc, argv);
 
         AnnotatedTopologyReader topologyReader("", 25);
-        topologyReader.SetFileName("scratch/DataCenterTopology.txt");
+        topologyReader.SetFileName("src/ndnSIM/examples/topologies/DataCenterTopology.txt");
         topologyReader.Read();
 
         // Create error model to add packet loss
@@ -79,7 +79,6 @@ namespace ns3 {
         }
         // Calculate and install FIBs
         ndn::GlobalRoutingHelper::CalculateRoutes();
-
 
         Simulator::Run();
         Simulator::Destroy();

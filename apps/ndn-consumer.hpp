@@ -183,9 +183,10 @@ protected:
     int64_t totalAggregateTime;
     int iteration;
 
-    // RTT recording file
-    std::string RTT_recorder= "scratch/response_time.txt";
-
+    // For testing purpose, log file
+    std::string RTT_recorder = "src/ndnSIM/examples/log/response_time.txt";
+    //std::string aggreTime_recorder = "src/ndnSIM/examples/log/aggre_time.txt";
+    int suspiciousPacketCount;
 
 
     Ptr<UniformRandomVariable> m_rand; ///< @brief nonce generator

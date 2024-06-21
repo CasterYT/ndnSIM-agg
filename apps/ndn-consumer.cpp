@@ -112,11 +112,11 @@ Consumer::Consumer()
   m_rtt = CreateObject<RttMeanDeviation>();
 
     // Open and immediately close the file in write mode to clear it
-    std::ofstream file(RTT_recorder, std::ios::out);
-    if (!file.is_open()) {
+    std::ofstream file1(RTT_recorder, std::ios::out);
+    if (!file1.is_open()) {
         std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
     }
-    file.close(); // Optional here since file will be closed automatically
+    file1.close(); // Optional here since file will be closed automatically
 }
 
 // Application Methods
@@ -530,7 +530,11 @@ Consumer::OnData(shared_ptr<const Data> data)
     std::string dataName = data->getName().toUri();
     NS_LOG_INFO ("Received content object: " << boost::cref(*data));
 
-    m_timeoutCheck.erase(dataName);
+    // Erase timeout
+    if (m_timeoutCheck.find(dataName) == m_timeoutCheck.end())
+        m_timeoutCheck.erase(dataName);
+    else
+        NS_LOG_DEBUG("Suspicious data packet, not exists in timeout list.");
 
     if (type == "data") {
         std::string seqNum = data->getName().get(-1).toUri();
@@ -610,12 +614,14 @@ Consumer::OnData(shared_ptr<const Data> data)
                 NS_LOG_INFO("The average aggregation time of Consumer in " << iteration << " iteration is: " << GetAggregateTimeAverage() << " ms");
                 return;
             }
-
-        } else if (type == "initialization") {
-            std::string destNode = data->getName().get(0).toUri();
-            NS_LOG_INFO("Node " << destNode << " has received aggregationTree map!");
+        } else {
+            NS_LOG_DEBUG("Suspicious data packet, not exist in data map.");
         }
 
+
+    } else if (type == "initialization") {
+        std::string destNode = data->getName().get(0).toUri();
+        NS_LOG_INFO("Node " << destNode << " has received aggregationTree map!");
     }
 }
 
