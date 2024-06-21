@@ -17,6 +17,7 @@
  * ndnSIM, e.g., in COPYING.md file.  If not, see <http://www.gnu.org/licenses/>.
  **/
 
+#include <fstream>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -109,6 +110,13 @@ Consumer::Consumer()
   , iteration(0)
 {
   m_rtt = CreateObject<RttMeanDeviation>();
+
+    // Open and immediately close the file in write mode to clear it
+    std::ofstream file(RTT_recorder, std::ios::out);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+    }
+    file.close(); // Optional here since file will be closed automatically
 }
 
 // Application Methods
@@ -276,6 +284,20 @@ Consumer::ResponseTimeSum (int64_t response_time)
 {
     total_response_time += response_time;
     ++round;
+
+    // Open the file using fstream in append mode
+    std::ofstream file(RTT_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+        return;
+    }
+
+    // Write the response_time to the file, followed by a newline
+    file << response_time << std::endl;
+
+    // Close the file
+    file.close();
 }
 
 int64_t
@@ -582,8 +604,8 @@ Consumer::OnData(shared_ptr<const Data> data)
             }
 
             /// Stop simulation
-            if (iteration == 1000) {
-                NS_LOG_DEBUG("Reach 1000 iterations, stop!");
+            if (iteration == 100) {
+                NS_LOG_DEBUG("Reach 100 iterations, stop!");
                 ns3::Simulator::Stop();
                 NS_LOG_INFO("The average aggregation time of Consumer in " << iteration << " iteration is: " << GetAggregateTimeAverage() << " ms");
                 return;

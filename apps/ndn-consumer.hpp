@@ -183,6 +183,9 @@ protected:
     int64_t totalAggregateTime;
     int iteration;
 
+    // RTT recording file
+    std::string RTT_recorder= "scratch/response_time.txt";
+
 
 
     Ptr<UniformRandomVariable> m_rand; ///< @brief nonce generator
