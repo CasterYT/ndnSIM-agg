@@ -139,6 +139,7 @@ public:
 
 
 
+
 protected:
     // Global sequence number
     uint32_t globalSeq;
@@ -162,7 +163,8 @@ protected:
     std::map<std::string, ns3::Time> m_timeoutCheck;
     Time m_timeoutThreshold;
     Time RTT_Timer;
-    uint64_t SmoothedRTT;
+    int64_t SRTT;
+    int64_t RTTVAR;
     int roundRTT;
 
 
@@ -185,7 +187,6 @@ protected:
 
     // For testing purpose, log file
     std::string RTT_recorder = "src/ndnSIM/examples/log/response_time.txt";
-    //std::string aggreTime_recorder = "src/ndnSIM/examples/log/aggre_time.txt";
     int suspiciousPacketCount;
 
 

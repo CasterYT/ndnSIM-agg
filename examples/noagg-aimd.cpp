@@ -45,24 +45,12 @@ namespace ns3 {
             if (nodeName.find("con") == 0) {
                 // Install ConsumerCbr on consumer nodes
                 ndn::AppHelper consumerHelper("ns3::ndn::ConsumerINA");
-                //consumerHelper.SetAttribute("Prefix", StringValue("pro0.pro1.pro2.pro3.pro4.pro5.pro6.pro7.pro8.pro9.pro10.pro11.pro12.pro13.pro14.pro15.pro16.pro17.pro18.pro19"));
+                consumerHelper.SetAttribute("Prefix", StringValue("pro0.pro1.pro2.pro3.pro4.pro5.pro6.pro7.pro8.pro9.pro10.pro11.pro12.pro13.pro14.pro15.pro16.pro17.pro18.pro19"));
                 consumerHelper.SetAttribute("Window", StringValue("1"));
                 consumerHelper.SetAttribute("UseCwa", BooleanValue(false));
-                consumerHelper.SetAttribute("NodePrefix", StringValue("con0"));
                 auto app1 = consumerHelper.Install(node);
                 GlobalRoutingHelper.Install(node); // Ensure routing is enabled
                 app1.Start(Seconds(1));
-            } else if (nodeName.find("agg") == 0) {
-                // Install a hypothetical Aggregator application on aggregator nodes
-                ndn::AppHelper aggregatorHelper("ns3::ndn::Aggregator");
-                aggregatorHelper.SetPrefix("/" + nodeName);
-                //aggregatorHelper.SetAttribute("NodePrefix", StringValue(nodeName));
-                aggregatorHelper.SetAttribute("Window", StringValue("1"));
-                aggregatorHelper.SetAttribute("UseCwa", BooleanValue(false));
-                auto app2 = aggregatorHelper.Install(node);
-                GlobalRoutingHelper.Install(node); // Ensure routing is enabled
-                GlobalRoutingHelper.AddOrigins("/" + nodeName, node);
-                app2.Start(Seconds(0));
             } else if (nodeName.find("pro") == 0) {
                 // Install Producer on producer nodes
                 ndn::AppHelper producerHelper("ns3::ndn::Producer");
@@ -73,8 +61,8 @@ namespace ns3 {
                 GlobalRoutingHelper.AddOrigins("/" + nodeName, node);
 
                 // Add error rate to producer
-                //Ptr<NetDevice> proDevice = node->GetDevice(0);
-                //proDevice->SetAttribute("ReceiveErrorModel", PointerValue(em));
+                Ptr<NetDevice> proDevice = node->GetDevice(0);
+                proDevice->SetAttribute("ReceiveErrorModel", PointerValue(em));
             }
         }
         // Calculate and install FIBs

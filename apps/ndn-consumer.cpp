@@ -103,7 +103,8 @@ Consumer::Consumer()
   , m_rand(CreateObject<UniformRandomVariable>())
   , m_seq(0)
   , total_response_time(0)
-  , SmoothedRTT(0)
+  , SRTT(0)
+  , RTTVAR(0)
   , roundRTT(0)
   , round(0)
   , totalAggregateTime(0)
@@ -385,7 +386,7 @@ Consumer::CheckRetxTimeout()
 }
 
 
-Time
+/*Time
 Consumer::RTTMeasurement(int64_t resTime)
 {
     if (roundRTT == 0) {
@@ -404,6 +405,22 @@ Consumer::RTTMeasurement(int64_t resTime)
         //return std::max(m_retxTimer * 6, MilliSeconds(SmoothedRTT * 2));
         return m_retxTimer * 6;
     }
+}*/
+
+Time
+Consumer::RTTMeasurement(int64_t resTime)
+{
+    if (roundRTT == 0) {
+        RTTVAR = resTime / 2;
+        SRTT = resTime;
+    } else {
+        RTTVAR = 0.75 * RTTVAR + 0.25 * std::abs(SRTT - resTime); // RTTVAR = (1 - b) * RTTVAR + b * |SRTT - RTTsample|, where b = 0.25
+        SRTT = 0.875 * SRTT + 0.125 * resTime; // SRTT = (1 - a) * SRTT + a * RTTsample, where a = 0.125
+    }
+    roundRTT++;
+    int64_t RTO = SRTT + 4 * RTTVAR; // RTO = SRTT + K * RTTVAR, where K = 4
+
+    return MilliSeconds(2 * RTO);
 }
 
 

@@ -106,6 +106,10 @@ public:
     std::map<std::string, std::set<std::string>> aggTreeProcessStrings(const std::vector<std::string>& inputs);
 
 
+    // For testing purpose, measure the consumer's window
+    void WindowMeasure();
+
+
 
 
 protected:
@@ -171,7 +175,8 @@ protected:
     // Timeout check and RTT measurement
     std::map<std::string, ns3::Time> m_timeoutCheck;
     Time m_timeoutThreshold;
-    uint64_t SmoothedRTT;
+    int64_t SRTT;
+    int64_t RTTVAR;
     int roundRTT;
     Time RTT_Timer;
 
@@ -198,6 +203,11 @@ protected:
 
     // Receive aggregation tree from consumer
     std::map<std::string, std::set<std::string>> aggregationMap;
+
+
+    // For testing purpose
+    std::string windowTimeRecorder;
+    EventId windowMonitor;
 
 
     struct RetxSeqsContainer : public std::set<uint32_t> {

@@ -18,6 +18,8 @@
  **/
 
 #include "ndn-consumer-INA.hpp"
+#include <fstream>
+#include <string>
 
 NS_LOG_COMPONENT_DEFINE("ndn.ConsumerINA");
 
@@ -84,6 +86,12 @@ ConsumerINA::ConsumerINA()
     , m_highData(0)
     , m_recPoint(0.0)
 {
+    // Open and immediately close the file in write mode to clear it
+    std::ofstream file1(windowTimeRecorder, std::ios::out);
+    if (!file1.is_open()) {
+        std::cerr << "Failed to open the file: " << windowTimeRecorder << std::endl;
+    }
+    file1.close(); // Optional here since file will be closed automatically
 }
 
 void
@@ -115,6 +123,14 @@ ConsumerINA::ScheduleNextPacket()
         NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
         m_sendEvent = Simulator::ScheduleNow(&Consumer::SendPacket, this);
     }
+}
+
+
+void
+ConsumerINA::StartApplication()
+{
+    Consumer::StartApplication();
+    windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowMeasure, this);
 }
 
 void
@@ -216,6 +232,21 @@ ConsumerINA::WindowDecrease()
     }
 }
 
+
+void
+ConsumerINA::WindowMeasure()
+{
+    // Open file; on first call, truncate it to delete old content
+    std::ofstream file(windowTimeRecorder, std::ios::app);
+
+    if (file.is_open()) {
+        file << m_window << "\n";  // Write text followed by a newline
+        file.close();          // Close the file after writing
+    } else {
+        std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;
+    }
+    windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowMeasure, this);
+}
 
 } // namespace ndn
 } // namespace ns3

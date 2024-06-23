@@ -128,7 +128,8 @@ Aggregator::Aggregator()
     , m_highData(0)
     , m_recPoint(0.0)
     , m_seq(0)
-    , SmoothedRTT(0)
+    , SRTT(0)
+    , RTTVAR(0)
     , roundRTT(0)
     , totalResponseTime(0)
     , round(0)
@@ -242,13 +243,13 @@ Aggregator::CheckRetxTimeout()
 }
 
 
-Time
+/*Time
 Aggregator::RTTMeasurement(int64_t resTime)
 {
     if (roundRTT == 0) {
-        SmoothedRTT += resTime;
+        SRTT += resTime;
     } else {
-        SmoothedRTT = SmoothedRTT * 0.875 + resTime * 0.125;
+        SRTT = SRTT * 0.875 + resTime * 0.125;
     }
     roundRTT++;
 
@@ -256,10 +257,26 @@ Aggregator::RTTMeasurement(int64_t resTime)
         NS_LOG_DEBUG("Round is less than 5, use original threshold: " << (m_retxTimer*6).GetMilliSeconds());
         return m_retxTimer * 6;
     } else {
-        NS_LOG_DEBUG("New timeout interval: " << static_cast<int64_t>(SmoothedRTT * 4) << " ms");
-        //return std::max(m_retxTimer * 6, MilliSeconds(SmoothedRTT * 2));
+        NS_LOG_DEBUG("New timeout interval: " << static_cast<int64_t>(SRTT * 4) << " ms");
+        //return std::max(m_retxTimer * 6, MilliSeconds(SRTT * 2));
         return m_retxTimer * 6;
     }
+}*/
+
+Time
+Aggregator::RTTMeasurement(int64_t resTime)
+{
+    if (roundRTT == 0) {
+        RTTVAR = resTime / 2;
+        SRTT = resTime;
+    } else {
+        RTTVAR = 0.75 * RTTVAR + 0.25 * std::abs(SRTT - resTime); // RTTVAR = (1 - b) * RTTVAR + b * |SRTT - RTTsample|, where b = 0.25
+        SRTT = 0.875 * SRTT + 0.125 * resTime; // SRTT = (1 - a) * SRTT + a * RTTsample, where a = 0.125
+    }
+    roundRTT++;
+    int64_t RTO = SRTT + 4 * RTTVAR; // RTO = SRTT + K * RTTVAR, where K = 4
+
+    return MilliSeconds(2 * RTO);
 }
 
 
@@ -307,7 +324,17 @@ Aggregator::StartApplication()
     NS_LOG_FUNCTION_NOARGS();
     App::StartApplication();
     FibHelper::AddRoute(GetNode(), m_prefix, m_face, 0);
-    //Simulator::Schedule(Seconds(0.05), &Aggregator::CheckRetxTimeout, this);
+
+    // For testing purpose
+    windowTimeRecorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_window_time_recorder.txt";
+    // Open and immediately close the file in write mode to clear it
+    std::ofstream file1(windowTimeRecorder, std::ios::out);
+    if (!file1.is_open()) {
+        std::cerr << "Failed to open the file: " << windowTimeRecorder << std::endl;
+    }
+    file1.close(); // Optional here since file will be closed automatically
+
+    windowMonitor = Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowMeasure, this);
 }
 
 void
@@ -414,7 +441,6 @@ Aggregator::WindowDecrease()
     else {
         NS_LOG_DEBUG("Window decrease suppressed, HighData: " << m_highData << ", RecPoint: " << m_recPoint);
     }
-
 }
 
 
@@ -726,6 +752,21 @@ Aggregator::OnData(shared_ptr<const Data> data)
     }else{
         NS_LOG_DEBUG("Error, data name can't be recognized!");
     }
+}
+
+
+void
+Aggregator::WindowMeasure()
+{
+    // Open file; on first call, truncate it to delete old content
+    std::ofstream file(windowTimeRecorder, std::ios::app);
+    if (file.is_open()) {
+        file << "5" << " " << m_window << "\n";  // Write text followed by a newline
+        file.close();          // Close the file after writing
+    } else {
+        std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;
+    }
+    windowMonitor = Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowMeasure, this);
 }
 
 } // namespace ndn

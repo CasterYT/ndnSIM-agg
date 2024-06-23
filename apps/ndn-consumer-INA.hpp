@@ -56,6 +56,9 @@ public:
     ConsumerINA();
 
     virtual void
+    StartApplication();
+
+    virtual void
     OnData(shared_ptr<const Data> data) override;
 
     virtual void
@@ -80,6 +83,8 @@ private:
     uint32_t
     GetWindow() const;
 
+    // For testing purpose, measure the consumer's window
+    void WindowMeasure();
 
 
 public:
@@ -100,6 +105,10 @@ private:
     double m_beta;
     double m_addRttSuppress;
     bool m_reactToCongestionMarks;
+
+    // For testing purpose, consumer window monitor
+    std::string windowTimeRecorder = "src/ndnSIM/examples/log/consumer_window_time_recorder.txt";
+    EventId windowMonitor;
 
 
 };
