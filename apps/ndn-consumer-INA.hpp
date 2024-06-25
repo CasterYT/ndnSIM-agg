@@ -107,7 +107,7 @@ private:
     bool m_reactToCongestionMarks;
 
     // For testing purpose, consumer window monitor
-    std::string windowTimeRecorder = "src/ndnSIM/examples/log/consumer_window_time_recorder.txt";
+    std::string windowTimeRecorder = "src/ndnSIM/examples/log/agg_consumer_window.txt";
     EventId windowMonitor;
 
 

@@ -112,21 +112,24 @@ Consumer::Consumer()
 {
   m_rtt = CreateObject<RttMeanDeviation>();
 
-    // Open and immediately close the file in write mode to clear it
-    std::ofstream file1(RTT_recorder, std::ios::out);
-    if (!file1.is_open()) {
-        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
-    }
-    file1.close(); // Optional here since file will be closed automatically
 }
 
 // Application Methods
 void
 Consumer::StartApplication() // Called at time specified by Start
 {
+    // Open and immediately close the file in write mode to clear it
+    std::ofstream file1(RTT_recorder, std::ios::out);
+    if (!file1.is_open()) {
+        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+    }
+    file1.close(); // Optional here since file will be closed automatically
+
     ns3::Time algorithmStart = ns3::Simulator::Now();
     ConstructAggregationTree();
     NS_LOG_INFO("Algorithm converge time: " << (ns3::Simulator::Now() - algorithmStart).GetMilliSeconds() << " ms");
+
+    Simulator::Schedule(MilliSeconds(5), &Consumer::RTTRecorder, this);
 
     App::StartApplication();
     ScheduleNextPacket();
@@ -183,7 +186,7 @@ Consumer::ConstructAggregationTree()
 {
     App::ConstructAggregationTree();
     AggregationTree tree;
-    int C = 6;
+    int C = 10;
     std::vector<std::string> dataPointNames = tree.getProducers();
     std::map<std::string, std::vector<std::string>> rawAggregationTree;
     std::vector<std::vector<std::string>> rawSubTree;
@@ -285,20 +288,6 @@ Consumer::ResponseTimeSum (int64_t response_time)
 {
     total_response_time += response_time;
     ++round;
-
-    // Open the file using fstream in append mode
-    std::ofstream file(RTT_recorder, std::ios::app);
-
-    if (!file.is_open()) {
-        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
-        return;
-    }
-
-    // Write the response_time to the file, followed by a newline
-    file << response_time << std::endl;
-
-    // Close the file
-    file.close();
 }
 
 int64_t
@@ -420,7 +409,7 @@ Consumer::RTTMeasurement(int64_t resTime)
     roundRTT++;
     int64_t RTO = SRTT + 4 * RTTVAR; // RTO = SRTT + K * RTTVAR, where K = 4
 
-    return MilliSeconds(2 * RTO);
+    return MilliSeconds(RTO);
 }
 
 
@@ -641,6 +630,26 @@ Consumer::OnData(shared_ptr<const Data> data)
         NS_LOG_INFO("Node " << destNode << " has received aggregationTree map!");
     }
 }
+
+void
+Consumer::RTTRecorder()
+{
+    // Open the file using fstream in append mode
+    std::ofstream file(RTT_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+        return;
+    }
+
+    // Write the response_time to the file, followed by a newline
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << RTT_Timer.GetMilliSeconds() << std::endl;
+
+    // Close the file
+    file.close();
+    Simulator::Schedule(MilliSeconds(5), &Consumer::RTTRecorder, this);
+}
+
 
 } // namespace ndn
 } // namespace ns3

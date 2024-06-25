@@ -109,6 +109,8 @@ public:
     // For testing purpose, measure the consumer's window
     void WindowMeasure();
 
+    void RTT_Recorder();
+
 
 
 
@@ -180,6 +182,11 @@ protected:
     int roundRTT;
     Time RTT_Timer;
 
+    // For testing purpose, log file
+    //std::string RTT_recorder = "src/ndnSIM/examples/log/agg_response_time.txt";
+    //std::string windowTimeRecorder = "src/ndnSIM/examples/log/agg_consumer_window.txt";
+    std::string RTT_recorder;
+    std::string windowTimeRecorder;
 
     // Aggregation
     std::map<uint32_t, std::vector<std::string>> map_agg_oldSeq_newName; // name segments in vector
@@ -205,9 +212,6 @@ protected:
     std::map<std::string, std::set<std::string>> aggregationMap;
 
 
-    // For testing purpose
-    std::string windowTimeRecorder;
-    EventId windowMonitor;
 
 
     struct RetxSeqsContainer : public std::set<uint32_t> {

@@ -103,6 +103,8 @@ public:
 
     std::vector<float> getMean(const std::string& dataName);
 
+    void RTTRecorder();
+
 
 public:
     typedef void (*LastRetransmittedInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, int32_t hopCount);
@@ -186,7 +188,7 @@ protected:
     int iteration;
 
     // For testing purpose, log file
-    std::string RTT_recorder = "src/ndnSIM/examples/log/response_time.txt";
+    std::string RTT_recorder = "src/ndnSIM/examples/log/agg_consumer_RTT.txt";
     int suspiciousPacketCount;
 
 

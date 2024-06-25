@@ -138,6 +138,8 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
 {
     Consumer::OnData(data);
 
+    //WindowMeasure();
+
     uint64_t sequenceNum = data->getName().get(-1).toSequenceNumber();
 
     // Set highest received Data to sequence number
@@ -240,7 +242,7 @@ ConsumerINA::WindowMeasure()
     std::ofstream file(windowTimeRecorder, std::ios::app);
 
     if (file.is_open()) {
-        file << m_window << "\n";  // Write text followed by a newline
+        file << ns3::Simulator::Now().GetMilliSeconds() << " " << m_window << "\n";  // Write text followed by a newline
         file.close();          // Close the file after writing
     } else {
         std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;

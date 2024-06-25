@@ -276,7 +276,7 @@ Aggregator::RTTMeasurement(int64_t resTime)
     roundRTT++;
     int64_t RTO = SRTT + 4 * RTTVAR; // RTO = SRTT + K * RTTVAR, where K = 4
 
-    return MilliSeconds(2 * RTO);
+    return MilliSeconds(RTO);
 }
 
 
@@ -326,15 +326,23 @@ Aggregator::StartApplication()
     FibHelper::AddRoute(GetNode(), m_prefix, m_face, 0);
 
     // For testing purpose
-    windowTimeRecorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_window_time_recorder.txt";
+    RTT_recorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_RTT.txt";
+    windowTimeRecorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_window.txt";
+
     // Open and immediately close the file in write mode to clear it
-    std::ofstream file1(windowTimeRecorder, std::ios::out);
+    std::ofstream file1(RTT_recorder, std::ios::out);
+    std::ofstream file2(windowTimeRecorder, std::ios::out);
     if (!file1.is_open()) {
-        std::cerr << "Failed to open the file: " << windowTimeRecorder << std::endl;
+        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+    }
+    if (!file2.is_open()) {
+        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
     }
     file1.close(); // Optional here since file will be closed automatically
+    file2.close();
 
-    windowMonitor = Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowMeasure, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTT_Recorder, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowMeasure, this);
 }
 
 void
@@ -630,6 +638,8 @@ Aggregator::OnData(shared_ptr<const Data> data)
     if(!m_active)
         return;
 
+    //WindowMeasure();
+
     App::OnData(data);
     NS_LOG_INFO ("Received content object: " << boost::cref(*data));
     NS_LOG_INFO("The incoming data packet size is: " << data->wireEncode().size());
@@ -760,13 +770,33 @@ Aggregator::WindowMeasure()
 {
     // Open file; on first call, truncate it to delete old content
     std::ofstream file(windowTimeRecorder, std::ios::app);
+
     if (file.is_open()) {
-        file << "5" << " " << m_window << "\n";  // Write text followed by a newline
+        file << ns3::Simulator::Now().GetMilliSeconds() << " " << m_window << "\n";  // Write text followed by a newline
         file.close();          // Close the file after writing
     } else {
         std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;
     }
-    windowMonitor = Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowMeasure, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowMeasure, this);
+}
+
+void
+Aggregator::RTT_Recorder()
+{
+    // Open the file using fstream in append mode
+    std::ofstream file(RTT_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+        return;
+    }
+
+    // Write the response_time to the file, followed by a newline
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << RTT_Timer.GetMilliSeconds() << std::endl;
+
+    // Close the file
+    file.close();
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTT_Recorder, this);
 }
 
 } // namespace ndn
