@@ -105,6 +105,8 @@ public:
 
     void RTTRecorder();
 
+    void RTTThreshldMeasure(int64_t responseTime);
+
 
 public:
     typedef void (*LastRetransmittedInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, int32_t hopCount);
@@ -143,6 +145,11 @@ public:
 
 
 protected:
+    // New congestion/rate control
+    int numChild;
+    std::vector<int64_t> RTT_threshold_vec;
+    int64_t RTT_threshold;
+
     // Global sequence number
     uint32_t globalSeq;
     int roundSendInterest;

@@ -86,6 +86,7 @@ ConsumerINA::ConsumerINA()
     , m_highData(0)
     , m_recPoint(0.0)
 {
+    m_alpha = 0.8;
     // Open and immediately close the file in write mode to clear it
     std::ofstream file1(windowTimeRecorder, std::ios::out);
     if (!file1.is_open()) {
@@ -113,7 +114,7 @@ ConsumerINA::ScheduleNextPacket()
         m_sendEvent = Simulator::Schedule(Seconds(std::min<double>(0.5, (m_retxTimer*6).GetSeconds())),
                                           &Consumer::SendPacket, this);
     }
-    else if (m_inFlight >= m_window) {
+    else if (m_window - m_inFlight <= 0) {
         // do nothing
     }
     else {
@@ -140,6 +141,7 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
 
     //WindowMeasure();
 
+    std::string dataName = data->getName().toUri();
     uint64_t sequenceNum = data->getName().get(-1).toSequenceNumber();
 
     // Set highest received Data to sequence number
@@ -147,14 +149,20 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
         m_highData = sequenceNum;
     }
 
+    // testing
+    NS_LOG_INFO("RTT in ConsumerINA is: " << responseTime[dataName].GetMilliSeconds() << " ms");
+
     if (data->getCongestionMark() > 0) {
         if (m_reactToCongestionMarks) {
             NS_LOG_DEBUG("Received congestion mark: " << data->getCongestionMark());
-            WindowDecrease();
+            WindowDecrease("RTT_threshold");
         }
         else {
             NS_LOG_DEBUG("Ignored received congestion mark: " << data->getCongestionMark());
         }
+    }
+    else if (RTT_threshold != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
+        WindowDecrease("RTT_threshold");
     }
     else {
         WindowIncrease();
@@ -172,7 +180,7 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
 void
 ConsumerINA::OnTimeout(std::string nameString)
 {
-    WindowDecrease();
+    WindowDecrease("timeout");
 
     if (m_inFlight > static_cast<uint32_t>(0)) {
         m_inFlight--;
@@ -210,7 +218,7 @@ ConsumerINA::WindowIncrease()
 
 
 void
-ConsumerINA::WindowDecrease()
+ConsumerINA::WindowDecrease(std::string type)
 {
     if (!m_useCwa || m_highData > m_recPoint) {
         const double diff = m_seq - m_highData;
@@ -218,16 +226,21 @@ ConsumerINA::WindowDecrease()
 
         m_recPoint = m_seq + (m_addRttSuppress * diff);
 
-        // AIMD
-        m_ssthresh = m_window * m_beta;
-        m_window = m_ssthresh;
+        // AIMD for timeout
+        if (type == "timeout") {
+            m_ssthresh = m_window * m_beta;
+            m_window = m_ssthresh;
+        } else if (type == "RTT_threshold") {
+            m_ssthresh = m_window * m_alpha;
+            m_window = m_ssthresh;
+        }
 
         // Window size can't be reduced below initial size
         if (m_window < m_initialWindow) {
             m_window = m_initialWindow;
         }
 
-        NS_LOG_DEBUG("Window size decreased to " << m_window);
+        NS_LOG_DEBUG("Encounter " << type << ". Window size decreased to " << m_window);
     }
     else {
         NS_LOG_DEBUG("Window decrease suppressed, HighData: " << m_highData << ", RecPoint: " << m_recPoint);

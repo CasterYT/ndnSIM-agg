@@ -98,7 +98,8 @@ Consumer::GetTypeId(void)
 }
 
 Consumer::Consumer()
-  : globalSeq(0)
+  : RTT_threshold(0)
+  , globalSeq(0)
   , roundSendInterest(0)
   , m_rand(CreateObject<UniformRandomVariable>())
   , m_seq(0)
@@ -153,8 +154,11 @@ Consumer::TreeBroadcast()
 
     for (const auto& [parentNode, childList] : broadcastTree) {
         // Don't broadcast to itself
-        if (parentNode == m_nodeprefix)
+        if (parentNode == m_nodeprefix) {
+            numChild = childList.size();
             continue;
+        }
+
 
         std::string nameWithType;
         std::string nameType = "initialization";
@@ -537,7 +541,7 @@ Consumer::OnData(shared_ptr<const Data> data)
     NS_LOG_INFO ("Received content object: " << boost::cref(*data));
 
     // Erase timeout
-    if (m_timeoutCheck.find(dataName) == m_timeoutCheck.end())
+    if (m_timeoutCheck.find(dataName) != m_timeoutCheck.end())
         m_timeoutCheck.erase(dataName);
     else
         NS_LOG_DEBUG("Suspicious data packet, not exists in timeout list.");
@@ -574,6 +578,11 @@ Consumer::OnData(shared_ptr<const Data> data)
                 ResponseTimeSum(responseTime[dataName].GetMilliSeconds());
                 currentTime.erase(dataName);
                 NS_LOG_INFO("Consumer's response time of sequence " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
+            }
+
+            // Set RTT_threshold to control cwnd
+            if (RTT_threshold_vec.size() < numChild) {
+                RTTThreshldMeasure(responseTime[dataName].GetMilliSeconds());
             }
 
             // Reset RetxTimer and timeout interval
@@ -650,6 +659,19 @@ Consumer::RTTRecorder()
     Simulator::Schedule(MilliSeconds(5), &Consumer::RTTRecorder, this);
 }
 
+void
+Consumer::RTTThreshldMeasure(int64_t responseTime)
+{
+    RTT_threshold_vec.push_back(responseTime);
+    if (RTT_threshold_vec.size() == numChild) {
+        int64_t sum = 0;
+        for (int64_t item: RTT_threshold_vec) {
+            sum += item;
+        }
+        RTT_threshold = 2 * (sum / numChild);
+        NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
+    }
+}
 
 } // namespace ndn
 } // namespace ns3

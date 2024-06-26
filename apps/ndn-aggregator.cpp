@@ -510,7 +510,8 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
                 value_agg.push_back(newName->toUri());
 
                 /// Store relevant into FIFO queue, schedule the send event later
-                interestQueue.push(newName);
+                //interestQueue.push(newName);
+                SendInterest(newName);
             }
         }
 
@@ -518,7 +519,7 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
             map_agg_oldSeq_newName[seq] = value_agg;
             m_agg_newDataName[seq] = originalName;
         }
-        ScheduleNextPacket();
+        //ScheduleNextPacket();
 
     } else if (interestType == "initialization") {
         // Extract useful info and parse it into readable format
@@ -649,7 +650,7 @@ Aggregator::OnData(shared_ptr<const Data> data)
     uint32_t seq = data->getName().at(-1).toSequenceNumber();
 
     // Stop checking timeout associated with this seq
-    if (m_timeoutCheck.find(dataName) == m_timeoutCheck.end())
+    if (m_timeoutCheck.find(dataName) != m_timeoutCheck.end())
         m_timeoutCheck.erase(dataName);
     else
         NS_LOG_DEBUG("Data " << dataName << " doesn't exist in the map, please check!");
@@ -677,7 +678,7 @@ Aggregator::OnData(shared_ptr<const Data> data)
 
     NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
 
-    ScheduleNextPacket();
+    //ScheduleNextPacket();
 
 
     // Check what are the exact names of data waiting for aggregation

@@ -75,7 +75,7 @@ private:
     WindowIncrease();
 
     void
-    WindowDecrease();
+    WindowDecrease(std::string type);
 
     virtual void
     SetWindow(uint32_t window);
@@ -91,18 +91,19 @@ public:
     typedef std::function<void(double)> WindowTraceCallback;
 
 private:
-    // Window design, important!!!!!!
+    // Window design
     uint32_t m_initialWindow;
     TracedValue<double> m_window;;
     TracedValue<uint32_t> m_inFlight;
     bool m_setInitialWindowOnTimeout;
 
-    // AIMD design, important!!!!!!
+    // AIMD design
     double m_ssthresh;
     bool m_useCwa;
     uint32_t m_highData;
     double m_recPoint;
     double m_beta;
+    double m_alpha;
     double m_addRttSuppress;
     bool m_reactToCongestionMarks;
 
