@@ -145,6 +145,9 @@ public:
 
 
 protected:
+    // Topology file name
+    std::string filename = "src/ndnSIM/examples/topologies/DataCenterTopology.txt";
+
     // New congestion/rate control
     int numChild;
     std::vector<int64_t> RTT_threshold_vec;

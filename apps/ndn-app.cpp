@@ -32,7 +32,10 @@
 #include <vector>
 #include <map>
 
-#include "aggregationTree.hpp"
+//#include "aggregationTree.hpp"
+#include "src/ndnSIM/apps/algorithm/include/AggregationTree.hpp"
+#include "src/ndnSIM/apps/algorithm/utility/utility.hpp"
+
 
 NS_LOG_COMPONENT_DEFINE("ndn.App");
 

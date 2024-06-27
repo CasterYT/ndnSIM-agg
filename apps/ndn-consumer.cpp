@@ -54,8 +54,11 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/ref.hpp>
 
-#include "aggregationTree.hpp"
+//#include "aggregationTree.hpp"
 #include "ModelData.hpp"
+
+#include "src/ndnSIM/apps/algorithm/include/AggregationTree.hpp"
+#include "src/ndnSIM/apps/algorithm/utility/utility.hpp"
 
 NS_LOG_COMPONENT_DEFINE("ndn.Consumer");
 
@@ -189,9 +192,9 @@ void
 Consumer::ConstructAggregationTree()
 {
     App::ConstructAggregationTree();
-    AggregationTree tree;
+    AggregationTree tree(filename);
     int C = 10;
-    std::vector<std::string> dataPointNames = tree.getProducers();
+    std::vector<std::string> dataPointNames = Utility::getProducers(filename);
     std::map<std::string, std::vector<std::string>> rawAggregationTree;
     std::vector<std::vector<std::string>> rawSubTree;
 
@@ -202,7 +205,7 @@ Consumer::ConstructAggregationTree()
     }
 
     // Get the number of producers
-    producerCount = tree.countProducers();
+    producerCount = Utility::countProducers(filename);
     NS_LOG_INFO("The number of producers is: " << producerCount);
 
     for (const auto& item : dataPointNames) {
