@@ -16,7 +16,7 @@
 
 
 namespace Utility{
-//public:
+
     // Comparator for priority queue
     struct Compare {
         bool operator()(const std::pair<std::string, int>& p1, const std::pair<std::string, int>& p2) {

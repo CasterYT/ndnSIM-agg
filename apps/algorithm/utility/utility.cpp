@@ -163,6 +163,8 @@ int Utility::findLinkCost(const std::string& start, const std::string& end, cons
     return -1; // No path found
 }
 
+
+
 // Initialize the nodes from the bottom for first iteration, i.e. get all producers
 std::vector<std::string> Utility::getProducers(std::string filename) {
     std::ifstream file(filename);

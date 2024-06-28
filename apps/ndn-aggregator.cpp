@@ -44,6 +44,13 @@ namespace ndn{
 
 NS_OBJECT_ENSURE_REGISTERED(Aggregator);
 
+
+
+/**
+ * Initiate attributes for consumer class, some of them may be used, some are optional
+ *
+ * @return Total TypeId
+ */
 TypeId
 Aggregator::GetTypeId(void)
 {
@@ -121,6 +128,11 @@ Aggregator::GetTypeId(void)
 
 }
 
+
+
+/**
+ * Constructor
+ */
 Aggregator::Aggregator()
     : m_rand(CreateObject<UniformRandomVariable>())
     , m_inFlight(0)
@@ -141,8 +153,11 @@ Aggregator::Aggregator()
 
 
 
-
-// Helper function to split string by a delimiter and return vector of strings
+/**
+ * Intermediate function to parse string, used in aggTreeProcessStrings()
+ * @param input
+ * @return Parsed string
+ */
 std::pair<std::string, std::set<std::string>>
 Aggregator::aggTreeProcessSingleString(const std::string& input)
 {
@@ -166,6 +181,12 @@ Aggregator::aggTreeProcessSingleString(const std::string& input)
 }
 
 
+
+/**
+ * When receive "initialization" message (tree construction) from consumer, parse the message to get required info
+ * @param inputs
+ * @return A map consist child node info for current aggregator
+ */
 std::map<std::string, std::set<std::string>>
 Aggregator::aggTreeProcessStrings(const std::vector<std::string>& inputs)
 {
@@ -182,6 +203,11 @@ Aggregator::aggTreeProcessStrings(const std::vector<std::string>& inputs)
 }
 
 
+
+/**
+ * Sum response time
+ * @param response_time
+ */
 void
 Aggregator::ResponseTimeSum (int64_t response_time)
 {
@@ -189,6 +215,12 @@ Aggregator::ResponseTimeSum (int64_t response_time)
     ++round;
 }
 
+
+
+/**
+ * Compute average for response time
+ * @return Average response time
+ */
 int64_t
 Aggregator::GetResponseTimeAverage()
 {
@@ -202,6 +234,11 @@ Aggregator::GetResponseTimeAverage()
 }
 
 
+
+/**
+ * Sum aggregation time from each iteration
+ * @param aggregate_time
+ */
 void
 Aggregator::AggregateTimeSum (int64_t aggregate_time)
 {
@@ -209,6 +246,12 @@ Aggregator::AggregateTimeSum (int64_t aggregate_time)
     ++iteration;
 }
 
+
+
+/**
+ * Get average aggregation time
+ * @return Average aggregation time
+ */
 int64_t
 Aggregator::GetAggregateTimeAverage()
 {
@@ -222,6 +265,10 @@ Aggregator::GetAggregateTimeAverage()
 }
 
 
+
+/**
+ * Check timeout every certain interval
+ */
 void
 Aggregator::CheckRetxTimeout()
 {
@@ -243,28 +290,14 @@ Aggregator::CheckRetxTimeout()
 }
 
 
-/*Time
-Aggregator::RTTMeasurement(int64_t resTime)
-{
-    if (roundRTT == 0) {
-        SRTT += resTime;
-    } else {
-        SRTT = SRTT * 0.875 + resTime * 0.125;
-    }
-    roundRTT++;
 
-    if (roundRTT < 5) {
-        NS_LOG_DEBUG("Round is less than 5, use original threshold: " << (m_retxTimer*6).GetMilliSeconds());
-        return m_retxTimer * 6;
-    } else {
-        NS_LOG_DEBUG("New timeout interval: " << static_cast<int64_t>(SRTT * 4) << " ms");
-        //return std::max(m_retxTimer * 6, MilliSeconds(SRTT * 2));
-        return m_retxTimer * 6;
-    }
-}*/
-
+/**
+ * Measure new RTO
+ * @param resTime
+ * @return New RTO
+ */
 Time
-Aggregator::RTTMeasurement(int64_t resTime)
+Aggregator::RTOMeasurement(int64_t resTime)
 {
     if (roundRTT == 0) {
         RTTVAR = resTime / 2;
@@ -281,6 +314,10 @@ Aggregator::RTTMeasurement(int64_t resTime)
 
 
 
+/**
+ * Triggered when timeout
+ * @param nameString
+ */
 void
 Aggregator::OnTimeout(std::string nameString)
 {
@@ -298,6 +335,11 @@ Aggregator::OnTimeout(std::string nameString)
 }
 
 
+
+/**
+ * Set initial timeout checking interval
+ * @param retxTimer
+ */
 void
 Aggregator::SetRetxTimer(Time retxTimer)
 {
@@ -312,12 +354,23 @@ Aggregator::SetRetxTimer(Time retxTimer)
     m_retxEvent = Simulator::Schedule(m_retxTimer, &Aggregator::CheckRetxTimeout, this);
 }
 
+
+
+/**
+ * Get timeout checking interval
+ * @return Timeout checking interval
+ */
 Time
 Aggregator::GetRetxTimer() const
 {
     return m_retxTimer;
 }
 
+
+
+/**
+ * Override, start this class
+ */
 void
 Aggregator::StartApplication()
 {
@@ -342,9 +395,14 @@ Aggregator::StartApplication()
     file2.close();
 
     Simulator::Schedule(MilliSeconds(5), &Aggregator::RTT_Recorder, this);
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowMeasure, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);
 }
 
+
+
+/**
+ * Override, stop this class
+ */
 void
 Aggregator::StopApplication()
 {
@@ -356,6 +414,13 @@ Aggregator::StopApplication()
     App::StopApplication();
 }
 
+
+
+/**
+ * Perform aggregation for incoming data packets (sum)
+ * @param data
+ * @param dataName
+ */
 void Aggregator::aggregate(const ModelData& data, const std::string& dataName) {
     // first initialization
     if (sumParameters.find(dataName) == sumParameters.end()){
@@ -368,6 +433,13 @@ void Aggregator::aggregate(const ModelData& data, const std::string& dataName) {
     count[dataName]++;
 }
 
+
+
+/**
+ * Don't get mean for now, just reformating the data packets, perform aggregation at consumer
+ * @param dataName
+ * @return Data content
+ */
 ModelData Aggregator::getMean(const std::string& dataName){
     ModelData result;
     if (sumParameters.find(dataName) != sumParameters.end()) {
@@ -377,6 +449,12 @@ ModelData Aggregator::getMean(const std::string& dataName){
     return result;
 }
 
+
+
+/**
+ * Invoked when Nack
+ * @param nack
+ */
 void
 Aggregator::OnNack(shared_ptr<const lp::Nack> nack)
 {
@@ -388,6 +466,11 @@ Aggregator::OnNack(shared_ptr<const lp::Nack> nack)
 }
 
 
+
+/**
+ * Set cwnd
+ * @param window
+ */
 void
 Aggregator::SetWindow(uint32_t window)
 {
@@ -395,12 +478,24 @@ Aggregator::SetWindow(uint32_t window)
     m_window = m_initialWindow;
 }
 
+
+
+/**
+ * Get cwnd
+ * @return cwnd
+ */
 uint32_t
 Aggregator::GetWindow() const
 {
     return m_initialWindow;
 }
 
+
+
+/**
+ * Set max sequence number, not used now
+ * @param seqMax
+ */
 void
 Aggregator::SetSeqMax(uint32_t seqMax)
 {
@@ -408,6 +503,12 @@ Aggregator::SetSeqMax(uint32_t seqMax)
     m_seqMax = seqMax;
 }
 
+
+
+/**
+ * Get max sequence number, not used now
+ * @return
+ */
 uint32_t
 Aggregator::GetSeqMax() const
 {
@@ -415,6 +516,10 @@ Aggregator::GetSeqMax() const
 }
 
 
+
+/**
+ * Increase cwnd
+ */
 void
 Aggregator::WindowIncrease()
 {
@@ -426,6 +531,11 @@ Aggregator::WindowIncrease()
     NS_LOG_DEBUG("Window size increased to " << m_window);
 }
 
+
+
+/**
+ * Decrease cwnd
+ */
 void
 Aggregator::WindowDecrease()
 {
@@ -452,6 +562,11 @@ Aggregator::WindowDecrease()
 }
 
 
+
+/**
+ * Process incoming interest packets
+ * @param interest
+ */
 void
 Aggregator::OnInterest(shared_ptr<const Interest> interest)
 {
@@ -566,6 +681,11 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
     }
 }
 
+
+
+/**
+ * Schedule next packet sending operation by cwnd
+ */
 void
 Aggregator::ScheduleNextPacket()
 {
@@ -590,6 +710,10 @@ Aggregator::ScheduleNextPacket()
 }
 
 
+
+/**
+ * Send packet, now used for now
+ */
 void
 Aggregator::SendPacket()
 {
@@ -605,6 +729,12 @@ Aggregator::SendPacket()
     }
 }
 
+
+
+/**
+ * Format the interest packet and send out interests
+ * @param newName
+ */
 void
 Aggregator::SendInterest(shared_ptr<Name> newName)
 {
@@ -633,13 +763,18 @@ Aggregator::SendInterest(shared_ptr<Name> newName)
     m_inFlight++;
 }
 
+
+
+/**
+ * Process incoming data packets
+ * @param data
+ */
 void
 Aggregator::OnData(shared_ptr<const Data> data)
 {
     if(!m_active)
         return;
 
-    //WindowMeasure();
 
     App::OnData(data);
     NS_LOG_INFO ("Received content object: " << boost::cref(*data));
@@ -708,7 +843,7 @@ Aggregator::OnData(shared_ptr<const Data> data)
         }
 
         // Reset RetxTimer and timeout interval
-        RTT_Timer = RTTMeasurement(responseTime[dataName].GetMilliSeconds());
+        RTT_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
         m_timeoutThreshold = RTT_Timer;
         NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
         NS_LOG_DEBUG("RTT measurement: " << RTT_Timer.GetMilliSeconds() << " ms");
@@ -766,8 +901,12 @@ Aggregator::OnData(shared_ptr<const Data> data)
 }
 
 
+
+/**
+ * Record window every 5 ms, and store them in a file
+ */
 void
-Aggregator::WindowMeasure()
+Aggregator::WindowRecorder()
 {
     // Open file; on first call, truncate it to delete old content
     std::ofstream file(windowTimeRecorder, std::ios::app);
@@ -778,9 +917,14 @@ Aggregator::WindowMeasure()
     } else {
         std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;
     }
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowMeasure, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);
 }
 
+
+
+/**
+ * Record RTT every 5 ms, and store them in a file
+ */
 void
 Aggregator::RTT_Recorder()
 {

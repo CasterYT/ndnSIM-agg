@@ -67,6 +67,13 @@ namespace ndn {
 
 NS_OBJECT_ENSURE_REGISTERED(Consumer);
 
+
+
+/**
+ * Initiate attributes for consumer class, some of them may be used, some are optional
+ *
+ * @return Total TypeId
+ */
 TypeId
 Consumer::GetTypeId(void)
 {
@@ -100,25 +107,145 @@ Consumer::GetTypeId(void)
   return tid;
 }
 
-Consumer::Consumer()
-  : RTT_threshold(0)
-  , globalSeq(0)
-  , roundSendInterest(0)
-  , m_rand(CreateObject<UniformRandomVariable>())
-  , m_seq(0)
-  , total_response_time(0)
-  , SRTT(0)
-  , RTTVAR(0)
-  , roundRTT(0)
-  , round(0)
-  , totalAggregateTime(0)
-  , iteration(0)
-{
-  m_rtt = CreateObject<RttMeanDeviation>();
 
+/**
+ * Constructor
+ */
+Consumer::Consumer()
+    : RTT_threshold(0)
+    , globalSeq(0)
+    , roundSendInterest(0)
+    , m_rand(CreateObject<UniformRandomVariable>())
+    , m_seq(0)
+    , total_response_time(0)
+    , SRTT(0)
+    , RTTVAR(0)
+    , roundRTT(0)
+    , round(0)
+    , totalAggregateTime(0)
+    , iteration(0)
+{
+    m_rtt = CreateObject<RttMeanDeviation>();
 }
 
-// Application Methods
+
+
+/**
+ * Broadcast the tree construction info to all aggregators
+ */
+void
+Consumer::TreeBroadcast()
+{
+     const auto& broadcastTree = aggregationTree[0];
+
+     uint32_t seq = 0;
+
+     for (const auto& [parentNode, childList] : broadcastTree) {
+         // Don't broadcast to itself
+         if (parentNode == m_nodeprefix) {
+             numChild = childList.size();
+             continue;
+         }
+
+
+         std::string nameWithType;
+         std::string nameType = "initialization";
+         nameWithType += "/" + parentNode;
+         auto result = getLeafNodes(parentNode, broadcastTree);
+
+         // Construct nameWithType variable for tree broadcast
+         for (const auto& [childNode, leaves] : result) {
+             std::string name_indication;
+             name_indication += childNode + ".";
+             for (const auto& leaf : leaves) {
+                 name_indication += leaf + ".";
+             }
+             name_indication.resize(name_indication.size() - 1);
+             nameWithType += "/" + name_indication;
+         }
+         nameWithType += "/" + nameType;
+
+         std::cout << "Node " << parentNode << "'s name is: " << nameWithType << std::endl;
+         shared_ptr<Name> newName = make_shared<Name>(nameWithType);
+         newName->appendSequenceNumber(seq);
+         SendInterest(newName);
+     }
+ }
+
+
+
+ /**
+  * Implement the algorithm to compute aggregation tree
+  */
+void
+Consumer::ConstructAggregationTree()
+{
+     App::ConstructAggregationTree();
+     AggregationTree tree(filename);
+     int C = 10;
+     std::vector<std::string> dataPointNames = Utility::getProducers(filename);
+     std::map<std::string, std::vector<std::string>> rawAggregationTree;
+     std::vector<std::vector<std::string>> rawSubTree;
+
+
+     if (tree.aggregationTreeConstruction(dataPointNames, C)) {
+         rawAggregationTree = tree.aggregationAllocation;
+         rawSubTree = tree.noCHTree;
+     }
+
+     // Get the number of producers
+     producerCount = Utility::countProducers(filename);
+     NS_LOG_INFO("The number of producers is: " << producerCount);
+
+     for (const auto& item : dataPointNames) {
+         proList += item + ".";
+     }
+     proList.resize(proList.size() - 1);
+     NS_LOG_INFO("proList: " << proList);
+
+     std::cout << "Aggregation tree: " << std::endl;
+     for (const auto& pair : rawAggregationTree) {
+         std::cout << pair.first << ": ";
+         for (const auto& item : pair.second) {
+             std::cout << item << " ";
+         }
+         std::cout << std::endl;
+     }
+
+     std::cout << "\nSub Tree without CH: " << std::endl;
+     for (const auto& pair : rawSubTree) {
+         for (const auto& item : pair) {
+             std::cout << item << " ";
+         }
+         std::cout << std::endl;
+     }
+
+     aggregationTree.push_back(rawAggregationTree);
+     while (!rawSubTree.empty()) {
+         const auto& item = rawSubTree[0];
+         rawAggregationTree[m_nodeprefix] = item;
+         aggregationTree.push_back(rawAggregationTree);
+         rawSubTree.erase(rawSubTree.begin());
+     }
+
+     std::cout << "Test aggregationTree variable." << std::endl;
+     for (const auto& map : aggregationTree) {
+         for (const auto& pair : map) {
+             std::cout << pair.first << ": ";
+             for (const auto& value : pair.second) {
+                 std::cout << value << " ";
+             }
+             std::cout << std::endl;
+         }
+         std::cout << "----" << std::endl;  // Separator between maps
+     }
+ }
+
+
+
+/**
+ * Originally defined in ndn::App class, override here. Start the running process of consumer class
+ */
 void
 Consumer::StartApplication() // Called at time specified by Start
 {
@@ -127,18 +254,27 @@ Consumer::StartApplication() // Called at time specified by Start
     if (!file1.is_open()) {
         std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
     }
-    file1.close(); // Optional here since file will be closed automatically
+    file1.close();
 
-    ns3::Time algorithmStart = ns3::Simulator::Now();
-    ConstructAggregationTree();
-    NS_LOG_INFO("Algorithm converge time: " << (ns3::Simulator::Now() - algorithmStart).GetMilliSeconds() << " ms");
+    std::ofstream file2(responseTime_recorder, std::ios::out);
+    if (!file2.is_open()) {
+        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
+    }
+    file2.close();
 
     Simulator::Schedule(MilliSeconds(5), &Consumer::RTTRecorder, this);
 
+    // Construct the tree
+    ConstructAggregationTree();
     App::StartApplication();
     ScheduleNextPacket();
 }
 
+
+
+/**
+ * Originally defined in ndn::App class, override here. Stop the running process of consumer class
+ */
 void
 Consumer::StopApplication() // Called at time specified by Stop
 {
@@ -148,112 +284,14 @@ Consumer::StopApplication() // Called at time specified by Stop
     App::StopApplication();
 }
 
-void
-Consumer::TreeBroadcast()
-{
-    const auto& broadcastTree = aggregationTree[0];
-
-    uint32_t seq = 0;
-
-    for (const auto& [parentNode, childList] : broadcastTree) {
-        // Don't broadcast to itself
-        if (parentNode == m_nodeprefix) {
-            numChild = childList.size();
-            continue;
-        }
 
 
-        std::string nameWithType;
-        std::string nameType = "initialization";
-        nameWithType += "/" + parentNode;
-        auto result = getLeafNodes(parentNode, broadcastTree);
-
-        // Construct nameWithType variable for tree broadcast
-        for (const auto& [childNode, leaves] : result) {
-            std::string name_indication;
-            name_indication += childNode + ".";
-            for (const auto& leaf : leaves) {
-                name_indication += leaf + ".";
-            }
-            name_indication.resize(name_indication.size() - 1);
-            nameWithType += "/" + name_indication;
-        }
-        nameWithType += "/" + nameType;
-
-        std::cout << "Node " << parentNode << "'s name is: " << nameWithType << std::endl;
-        shared_ptr<Name> newName = make_shared<Name>(nameWithType);
-        newName->appendSequenceNumber(seq);
-        SendInterest(newName);
-    }
-}
-
-
-void
-Consumer::ConstructAggregationTree()
-{
-    App::ConstructAggregationTree();
-    AggregationTree tree(filename);
-    int C = 10;
-    std::vector<std::string> dataPointNames = Utility::getProducers(filename);
-    std::map<std::string, std::vector<std::string>> rawAggregationTree;
-    std::vector<std::vector<std::string>> rawSubTree;
-
-
-    if (tree.aggregationTreeConstruction(dataPointNames, C)) {
-        rawAggregationTree = tree.aggregationAllocation;
-        rawSubTree = tree.noCHTree;
-    }
-
-    // Get the number of producers
-    producerCount = Utility::countProducers(filename);
-    NS_LOG_INFO("The number of producers is: " << producerCount);
-
-    for (const auto& item : dataPointNames) {
-        proList += item + ".";
-    }
-    proList.resize(proList.size() - 1);
-    NS_LOG_INFO("proList: " << proList);
-
-    std::cout << "Aggregation tree: " << std::endl;
-    for (const auto& pair : rawAggregationTree) {
-        std::cout << pair.first << ": ";
-        for (const auto& item : pair.second) {
-            std::cout << item << " ";
-        }
-        std::cout << std::endl;
-    }
-
-    std::cout << "\nSub Tree without CH: " << std::endl;
-    for (const auto& pair : rawSubTree) {
-        for (const auto& item : pair) {
-            std::cout << item << " ";
-        }
-        std::cout << std::endl;
-    }
-
-    aggregationTree.push_back(rawAggregationTree);
-    while (!rawSubTree.empty()) {
-        const auto& item = rawSubTree[0];
-        rawAggregationTree[m_nodeprefix] = item;
-        aggregationTree.push_back(rawAggregationTree);
-        rawSubTree.erase(rawSubTree.begin());
-    }
-
-    std::cout << "Test aggregationTree variable." << std::endl;
-    for (const auto& map : aggregationTree) {
-        for (const auto& pair : map) {
-            std::cout << pair.first << ": ";
-            for (const auto& value : pair.second) {
-                std::cout << value << " ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << "----" << std::endl;  // Separator between maps
-    }
-}
-
-
-// Defined for getting the leaf nodes of its child
+/**
+ * Get child nodes for given map and parent node. This function is originally defined in ndn::App class
+ * @param key
+ * @param treeMap
+ * @return A map consisting all child nodes of the parent node
+ */
 std::map<std::string, std::set<std::string>>
 Consumer::getLeafNodes(const std::string& key, const std::map<std::string, std::vector<std::string>>& treeMap)
 {
@@ -261,6 +299,12 @@ Consumer::getLeafNodes(const std::string& key, const std::map<std::string, std::
 }
 
 
+
+/**
+ * Perform aggregation (plus all model parameters together) operation, perform average when this iteration is done
+ * @param data
+ * @param dataName
+ */
 void
 Consumer::aggregate(const ModelData& data, const std::string& dataName)
 {
@@ -273,6 +317,13 @@ Consumer::aggregate(const ModelData& data, const std::string& dataName)
     std::transform(sumParameters[dataName].begin(), sumParameters[dataName].end(), data.parameters.begin(), sumParameters[dataName].begin(), std::plus<float>());
 }
 
+
+
+/**
+ * Get mean average of model parameters for one iteration
+ * @param dataName
+ * @return Mean average of model parameters
+ */
 std::vector<float>
 Consumer::getMean(const std::string& dataName)
 {
@@ -290,6 +341,11 @@ Consumer::getMean(const std::string& dataName)
 }
 
 
+
+/**
+ * Compute the total response time for average computation later
+ * @param response_time
+ */
 void
 Consumer::ResponseTimeSum (int64_t response_time)
 {
@@ -297,6 +353,12 @@ Consumer::ResponseTimeSum (int64_t response_time)
     ++round;
 }
 
+
+
+/**
+ * Compute average response time
+ * @return Average response time
+ */
 int64_t
 Consumer::GetResponseTimeAverage() {
     if (round == 0){
@@ -306,6 +368,12 @@ Consumer::GetResponseTimeAverage() {
     return total_response_time / round;
 }
 
+
+
+/**
+ * Compute total aggregation time for all iterations
+ * @param aggregate_time
+ */
 void
 Consumer::AggregateTimeSum (int64_t aggregate_time)
 {
@@ -314,6 +382,12 @@ Consumer::AggregateTimeSum (int64_t aggregate_time)
     ++iteration;
 }
 
+
+
+/**
+ * Return average aggregation time
+ * @return Average aggregation time in certain iterations
+ */
 int64_t
 Consumer::GetAggregateTimeAverage()
 {
@@ -326,6 +400,12 @@ Consumer::GetAggregateTimeAverage()
     return totalAggregateTime / iteration;
 }
 
+
+
+/**
+ * Invoked when Nack is triggered
+ * @param nack
+ */
 void
 Consumer::OnNack(shared_ptr<const lp::Nack> nack)
 {
@@ -334,6 +414,12 @@ Consumer::OnNack(shared_ptr<const lp::Nack> nack)
     NS_LOG_INFO("NACK received for: " << nack->getInterest().getName() << ", reason: " << nack->getReason());
 }
 
+
+
+/**
+ * Triggered when timeout is triggered, timeout is traced using unique interest/data name
+ * @param nameString
+ */
 void
 Consumer::OnTimeout(std::string nameString)
 {
@@ -341,6 +427,12 @@ Consumer::OnTimeout(std::string nameString)
     SendInterest(name);
 }
 
+
+
+/**
+ * Set initial interval on how long to check timeout
+ * @param retxTimer
+ */
 void
 Consumer::SetRetxTimer(Time retxTimer)
 {
@@ -355,12 +447,23 @@ Consumer::SetRetxTimer(Time retxTimer)
     m_retxEvent = Simulator::Schedule(m_retxTimer, &Consumer::CheckRetxTimeout, this);
 }
 
+
+
+/**
+ * Get timer for timeout check
+ * @return Timer set for timeout checking
+ */
 Time
 Consumer::GetRetxTimer() const
 {
   return m_retxTimer;
 }
 
+
+
+/**
+ * When invoked, check whether timeout happened for all packets in timeout list
+ */
 void
 Consumer::CheckRetxTimeout()
 {
@@ -382,29 +485,14 @@ Consumer::CheckRetxTimeout()
 }
 
 
-/*Time
-Consumer::RTTMeasurement(int64_t resTime)
-{
-    if (roundRTT == 0) {
-        SmoothedRTT += resTime;
-    } else {
-        SmoothedRTT = SmoothedRTT * 0.875 + resTime * 0.125;
-    }
-    roundRTT++;
 
-    if (roundRTT < 5) {
-        NS_LOG_DEBUG("Round is less than 5, use original threshold: " << (m_retxTimer*6).GetMilliSeconds());
-        return m_retxTimer * 6;
-    } else {
-        NS_LOG_DEBUG("New timeout interval: " << static_cast<int64_t>(SmoothedRTT * 4) << " ms");
-        //return MilliSeconds(SmoothedRTT);
-        //return std::max(m_retxTimer * 6, MilliSeconds(SmoothedRTT * 2));
-        return m_retxTimer * 6;
-    }
-}*/
-
+/**
+ * Compute new RTO based on response time of recent packets
+ * @param resTime
+ * @return New RTO
+ */
 Time
-Consumer::RTTMeasurement(int64_t resTime)
+Consumer::RTOMeasurement(int64_t resTime)
 {
     if (roundRTT == 0) {
         RTTVAR = resTime / 2;
@@ -420,6 +508,10 @@ Consumer::RTTMeasurement(int64_t resTime)
 }
 
 
+
+/**
+ * When ScheduleNextPacket() is invoked, this function is used to get relevant info and send out interests
+ */
 void
 Consumer::SendPacket()
 {
@@ -501,6 +593,11 @@ Consumer::SendPacket()
 }
 
 
+
+/**
+ * Invoked in SendPacket() function, used to construct interest packet and send it
+ * @param newName
+ */
 void Consumer::SendInterest(shared_ptr<Name> newName)
 {
     if (!m_active)
@@ -530,7 +627,10 @@ void Consumer::SendInterest(shared_ptr<Name> newName)
 ///////////////////////////////////////////////////
 //          Process incoming packets             //
 ///////////////////////////////////////////////////
-
+/**
+ * Process returned data packets
+ * @param data
+ */
 void
 Consumer::OnData(shared_ptr<const Data> data)
 {
@@ -583,13 +683,16 @@ Consumer::OnData(shared_ptr<const Data> data)
                 NS_LOG_INFO("Consumer's response time of sequence " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
             }
 
+            // Record response time store to a file
+            responseTimeRecorder(responseTime[dataName]);
+
             // Set RTT_threshold to control cwnd
             if (RTT_threshold_vec.size() < numChild) {
                 RTTThreshldMeasure(responseTime[dataName].GetMilliSeconds());
             }
 
             // Reset RetxTimer and timeout interval
-            RTT_Timer = RTTMeasurement(responseTime[dataName].GetMilliSeconds());
+            RTT_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
             NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
             NS_LOG_DEBUG("RTT measurement: " << RTT_Timer.GetMilliSeconds() << " ms");
             m_timeoutThreshold = RTT_Timer;
@@ -607,11 +710,7 @@ Consumer::OnData(shared_ptr<const Data> data)
 
                 /// Perform actual aggregation for those data
                 std::vector<float> aggregationResult = getMean(seqNum);
-/*                std::cout << "Client aggregation result: " << std::endl;
-                for (const auto& item : aggregationResult) {
-                    std::cout << item << " ";
-                }
-                std::cout << std::endl;*/
+
 
                 // Calculate aggregate time
                 if (aggregateStartTime.find(seq) != aggregateStartTime.end()) {
@@ -643,6 +742,31 @@ Consumer::OnData(shared_ptr<const Data> data)
     }
 }
 
+
+
+/**
+ * Based on RTT of the first iteration, compute their RTT average as threshold, use the threshold for congestion control
+ * @param responseTime
+ */
+void
+Consumer::RTTThreshldMeasure(int64_t responseTime)
+{
+    RTT_threshold_vec.push_back(responseTime);
+    if (RTT_threshold_vec.size() == numChild) {
+        int64_t sum = 0;
+        for (int64_t item: RTT_threshold_vec) {
+            sum += item;
+        }
+        RTT_threshold = 2 * (sum / numChild);
+        NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
+    }
+}
+
+
+
+/**
+ * Record the RTT every 5 ms, store them in a file
+ */
 void
 Consumer::RTTRecorder()
 {
@@ -662,19 +786,31 @@ Consumer::RTTRecorder()
     Simulator::Schedule(MilliSeconds(5), &Consumer::RTTRecorder, this);
 }
 
+
+
+/**
+ * Record the response time for each returned packet, store them in a file
+ * @param responseTime
+ */
 void
-Consumer::RTTThreshldMeasure(int64_t responseTime)
-{
-    RTT_threshold_vec.push_back(responseTime);
-    if (RTT_threshold_vec.size() == numChild) {
-        int64_t sum = 0;
-        for (int64_t item: RTT_threshold_vec) {
-            sum += item;
-        }
-        RTT_threshold = 2 * (sum / numChild);
-        NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
+Consumer::responseTimeRecorder(Time responseTime) {
+    // Open the file using fstream in append mode
+    std::ofstream file(responseTime_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
+        return;
     }
+
+    // Write the response_time to the file, followed by a newline
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << responseTime.GetMilliSeconds() << std::endl;
+
+    // Close the file
+    file.close();
 }
+
+
+
 
 } // namespace ndn
 } // namespace ns3

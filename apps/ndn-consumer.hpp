@@ -64,24 +64,12 @@ public:
     Consumer();
     virtual ~Consumer(){};
 
-
+    // Fundamental
     static TypeId GetTypeId();
 
     void TreeBroadcast();
 
     void ConstructAggregationTree();
-
-    void ResponseTimeSum (int64_t response_time);
-
-    int64_t
-    GetResponseTimeAverage();
-
-    // Calculate aggregate time
-    void
-    AggregateTimeSum (int64_t response_time);
-
-    int64_t
-    GetAggregateTimeAverage();
 
     virtual void
     OnData(shared_ptr<const Data> contentObject);
@@ -96,16 +84,39 @@ public:
     SendPacket();
 
 
-    Time RTTMeasurement(int64_t resTime);
-
-    // Aggregation
+    // Data aggregation operation
     void aggregate(const ModelData& data, const std::string& dataName);
 
     std::vector<float> getMean(const std::string& dataName);
 
+
+
+    // Calculate aggregate time and response time
+    void ResponseTimeSum (int64_t response_time);
+
+    int64_t
+    GetResponseTimeAverage();
+
+    void
+    AggregateTimeSum (int64_t response_time);
+
+    int64_t
+    GetAggregateTimeAverage();
+
+
+    // Measure threshold for congestion control
+    void RTTThreshldMeasure(int64_t responseTime);
+
+    // Based on response time, measure RTT for each round
+    Time RTOMeasurement(int64_t resTime);
+
+
+
+
+    // Print results in files, for testing purpose only
     void RTTRecorder();
 
-    void RTTThreshldMeasure(int64_t responseTime);
+    void responseTimeRecorder(Time responseTime);
 
 
 public:
@@ -198,7 +209,8 @@ protected:
     int iteration;
 
     // For testing purpose, log file
-    std::string RTT_recorder = "src/ndnSIM/examples/log/agg_consumer_RTT.txt";
+    std::string RTT_recorder = "src/ndnSIM/examples/log/agg_consumer_RTT_periodical.txt";
+    std::string responseTime_recorder = "src/ndnSIM/examples/log/agg_consumer_RTT_packet.txt";
     int suspiciousPacketCount;
 
 

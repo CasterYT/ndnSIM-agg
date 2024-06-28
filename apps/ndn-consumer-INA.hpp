@@ -84,7 +84,7 @@ private:
     GetWindow() const;
 
     // For testing purpose, measure the consumer's window
-    void WindowMeasure();
+    void WindowRecorder();
 
 
 public:

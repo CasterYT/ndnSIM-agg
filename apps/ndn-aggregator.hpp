@@ -97,7 +97,7 @@ public:
     int64_t
     GetAggregateTimeAverage();
 
-    Time RTTMeasurement(int64_t resTime);
+    Time RTOMeasurement(int64_t resTime);
 
 
     // Parse the received aggregation tree
@@ -107,7 +107,7 @@ public:
 
 
     // For testing purpose, measure the consumer's window
-    void WindowMeasure();
+    void WindowRecorder();
 
     void RTT_Recorder();
 

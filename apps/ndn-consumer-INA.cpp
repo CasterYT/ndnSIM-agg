@@ -28,7 +28,11 @@ namespace ndn {
 
 NS_OBJECT_ENSURE_REGISTERED(ConsumerINA);
 
-
+/**
+ * Initiate attributes for consumer class, some of them may be used, some are optional
+ *
+ * @return Total TypeId
+ */
 TypeId
 ConsumerINA::GetTypeId()
 {
@@ -80,6 +84,11 @@ ConsumerINA::GetTypeId()
   return tid;
 }
 
+
+
+/**
+ * Constructor
+ */
 ConsumerINA::ConsumerINA()
     : m_inFlight(0)
     , m_ssthresh(std::numeric_limits<double>::max())
@@ -95,6 +104,12 @@ ConsumerINA::ConsumerINA()
     file1.close(); // Optional here since file will be closed automatically
 }
 
+
+
+/**
+ * Override from consumer class
+ * @param newName
+ */
 void
 ConsumerINA::SendInterest(shared_ptr<Name> newName)
 {
@@ -103,6 +118,10 @@ ConsumerINA::SendInterest(shared_ptr<Name> newName)
 }
 
 
+
+/**
+ * Based on cwnd, schedule when to send packets
+ */
 void
 ConsumerINA::ScheduleNextPacket()
 {
@@ -127,19 +146,28 @@ ConsumerINA::ScheduleNextPacket()
 }
 
 
+
+/**
+ * Override from consumer
+ */
 void
 ConsumerINA::StartApplication()
 {
     Consumer::StartApplication();
-    windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowMeasure, this);
+    windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowRecorder, this);
 }
 
+
+
+/**
+ * Override from consumer, perform AIMD congestion control (add cnwd by 1 every time a packet is received)
+ * @param data
+ */
 void
 ConsumerINA::OnData(shared_ptr<const Data> data)
 {
     Consumer::OnData(data);
 
-    //WindowMeasure();
 
     std::string dataName = data->getName().toUri();
     uint64_t sequenceNum = data->getName().get(-1).toSequenceNumber();
@@ -177,6 +205,12 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
     ScheduleNextPacket();
 }
 
+
+
+/**
+ * Multiplicative decrease cwnd when timeout
+ * @param nameString
+ */
 void
 ConsumerINA::OnTimeout(std::string nameString)
 {
@@ -191,6 +225,12 @@ ConsumerINA::OnTimeout(std::string nameString)
     Consumer::OnTimeout(nameString);
 }
 
+
+
+/**
+ * Set cwnd
+ * @param window
+ */
 void
 ConsumerINA::SetWindow(uint32_t window)
 {
@@ -198,6 +238,12 @@ ConsumerINA::SetWindow(uint32_t window)
     m_window = m_initialWindow;
 }
 
+
+
+/**
+ * Return cwnd
+ * @return cwnd
+ */
 uint32_t
 ConsumerINA::GetWindow() const
 {
@@ -205,6 +251,10 @@ ConsumerINA::GetWindow() const
 }
 
 
+
+/**
+ * Increase cwnd
+ */
 void
 ConsumerINA::WindowIncrease()
 {
@@ -217,6 +267,11 @@ ConsumerINA::WindowIncrease()
 }
 
 
+
+/**
+ * Decrease cwnd
+ * @param type
+ */
 void
 ConsumerINA::WindowDecrease(std::string type)
 {
@@ -248,8 +303,12 @@ ConsumerINA::WindowDecrease(std::string type)
 }
 
 
+
+/**
+ * Record window every 5 ms, store them into a file
+ */
 void
-ConsumerINA::WindowMeasure()
+ConsumerINA::WindowRecorder()
 {
     // Open file; on first call, truncate it to delete old content
     std::ofstream file(windowTimeRecorder, std::ios::app);
@@ -260,7 +319,7 @@ ConsumerINA::WindowMeasure()
     } else {
         std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;
     }
-    windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowMeasure, this);
+    windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowRecorder, this);
 }
 
 } // namespace ndn
