@@ -109,59 +109,58 @@ Producer::StopApplication()
 void
 Producer::OnInterest(shared_ptr<const Interest> interest)
 {
-  App::OnInterest(interest); // tracing inside
-  //NS_LOG_FUNCTION(this << interest);
+    App::OnInterest(interest); // tracing inside
 
-  if (!m_active)
+    if (!m_active)
     return;
 
-  Name dataName(interest->getName());
-  // dataName.append(m_postfix);
-  // dataName.appendVersion();
+    Name dataName(interest->getName());
+    // dataName.append(m_postfix);
+    // dataName.appendVersion();
 
-  auto data = make_shared<Data>();
-  data->setName(dataName);
-  data->setFreshnessPeriod(::ndn::time::milliseconds(m_freshness.GetMilliSeconds()));
+    auto data = make_shared<Data>();
+    data->setName(dataName);
+    data->setFreshnessPeriod(::ndn::time::milliseconds(m_freshness.GetMilliSeconds()));
 
-  // generate new data content
-  // new data format and generate random 300 model parameters
-  ModelData modelData;
+    // generate new data content
+    // new data format and generate random 300 model parameters
+    ModelData modelData;
 
-  std::default_random_engine generator(std::random_device{}()); // create random generator
-  std::uniform_real_distribution<float> distribution(0.0f, 10.0f); // define range (0.0, 10.0)
-  modelData.parameters.clear(); // clear the previous result
-  for (int i = 0; i < 300; ++i){
-      modelData.parameters.push_back(distribution(generator)); // generate random float range (0.0, 10.0)
-  }
+    std::default_random_engine generator(std::random_device{}()); // create random generator
+    std::uniform_real_distribution<float> distribution(0.0f, 10.0f); // define range (0.0, 10.0)
+    modelData.parameters.clear(); // clear the previous result
+    for (int i = 0; i < 300; ++i){
+        modelData.parameters.push_back(distribution(generator)); // generate random float range (0.0, 10.0)
+    }
 
-  std::vector<uint8_t> buffer;
-  serializeModelData(modelData, buffer); // serialize data packet
-  data->setContent(make_shared< ::ndn::Buffer>(buffer.begin(), buffer.end()));
+    std::vector<uint8_t> buffer;
+    serializeModelData(modelData, buffer); // serialize data packet
+    data->setContent(make_shared< ::ndn::Buffer>(buffer.begin(), buffer.end()));
 
-  // end of data content
+    // end of data content
 
 
 
-  SignatureInfo signatureInfo(static_cast< ::ndn::tlv::SignatureTypeValue>(255));
+    SignatureInfo signatureInfo(static_cast< ::ndn::tlv::SignatureTypeValue>(255));
 
-  if (m_keyLocator.size() > 0) {
-    signatureInfo.setKeyLocator(m_keyLocator);
-  }
+    if (m_keyLocator.size() > 0) {
+        signatureInfo.setKeyLocator(m_keyLocator);
+    }
 
-  data->setSignatureInfo(signatureInfo);
+    data->setSignatureInfo(signatureInfo);
 
-  ::ndn::EncodingEstimator estimator;
-  ::ndn::EncodingBuffer encoder(estimator.appendVarNumber(m_signature), 0);
-  encoder.appendVarNumber(m_signature);
-  data->setSignatureValue(encoder.getBuffer());
+    ::ndn::EncodingEstimator estimator;
+    ::ndn::EncodingBuffer encoder(estimator.appendVarNumber(m_signature), 0);
+    encoder.appendVarNumber(m_signature);
+    data->setSignatureValue(encoder.getBuffer());
 
-  NS_LOG_INFO(m_prefix << " -> node(" << GetNode()->GetId() << ") responding with Data: " << data->getName());
+    NS_LOG_INFO(m_prefix << " -> node(" << GetNode()->GetId() << ") responding with Data: " << data->getName());
 
-  // to create real wire encoding
-  data->wireEncode();
+    // to create real wire encoding
+    data->wireEncode();
 
-  m_transmittedDatas(data, this, m_face);
-  m_appLink->onReceiveData(*data);
+    m_transmittedDatas(data, this, m_face);
+    m_appLink->onReceiveData(*data);
 }
 
 } // namespace ndn
