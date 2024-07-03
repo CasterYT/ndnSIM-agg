@@ -8,6 +8,7 @@
 
 struct ModelData {
     std::vector<float> parameters;
+    std::vector<std::string> congestedNodes;
 
     ModelData();
 };
