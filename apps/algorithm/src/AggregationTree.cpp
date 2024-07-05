@@ -1,4 +1,5 @@
 #include "../include/AggregationTree.hpp"
+#include "../include/regularized_k_means.hpp"
 #include "../utility/utility.hpp"
 
 #include <iostream>
@@ -15,6 +16,10 @@
 #include <climits>
 #include <stdexcept>
 #include <algorithm>
+#include <unistd.h>
+#include <vector>
+#include <chrono>
+
 
 
 
@@ -87,12 +92,12 @@ bool AggregationTree::aggregationTreeConstruction(std::vector<std::string> dataP
         clusterAssignment[i] = i % numClusters; // Cluster assignment based on modulus operation
     }
 
-    // Output the cluster assignments
+/*    // Output the cluster assignments
     std::cout << "Cluster initialization." << std::endl;
     std::cout << "There are " << numClusters << " clusters." << std::endl;
     for (int i = 0; i < N; ++i) {
         std::cout << "Data point " << dataPointNames[i] << " is in cluster " << clusterAssignment[i] << std::endl;
-    }
+    }*/
 
     // Create a map of clusters to their data points, store data point's ID inside cluster's vector
     std::vector<std::vector<std::string>> clusters(numClusters);
@@ -102,8 +107,40 @@ bool AggregationTree::aggregationTreeConstruction(std::vector<std::string> dataP
 
     // Start of balanced K-Means
     // Get the output at current layer (data point allocation for each cluster)
-    BalancedKMeans BKM;
-    std::vector<std::vector<std::string>> newCluster = BKM.balancedKMeans(N, C, numClusters, clusterAssignment, dataPointNames, clusters, linkCostMatrix);
+    //BalancedKMeans BKM;
+    //std::vector<std::vector<std::string>> newCluster = BKM.balancedKMeans(N, C, numClusters, clusterAssignment, dataPointNames, clusters, linkCostMatrix);
+
+
+
+
+
+    // BKM begins...
+    //std::string file = "../data/ndn_test.csv"; // input file
+    //std::string assignment_file = "assignments";
+    //std::string cluster_center_file = "clusters";
+    //std::string summary_file = "summary.txt";
+    int runs = 1; // number of repeat
+    //int k = 4; // number of clusters
+    int threads = -1; // default, auto-detect
+    bool no_warm_start = false; // must have warm start
+    unsigned int seed = std::random_device{}(); // seed for initialization
+    RegularizedKMeans::InitMethod init_method = RegularizedKMeans::InitMethod::kForgy;
+
+
+    //auto data = ReadData(file);
+    //auto start_time = std::chrono::high_resolution_clock::now();
+    double result;
+    KMeans* k_means;
+    auto* rkm = new RegularizedKMeans(
+            dataPointNames, numClusters,linkCostMatrix, init_method, !no_warm_start,
+            threads, seed);
+    result = rkm->SolveHard();
+    k_means = rkm;
+    //delete k_means;
+
+    // BKM finish...
+
+    std::vector<std::vector<std::string>> newCluster = k_means->clusters;
 
     // Construct the nodeList for CH allocation
     int i = 0;
