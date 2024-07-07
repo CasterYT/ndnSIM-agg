@@ -114,7 +114,7 @@ public:
 
 
     // Print results in files, for testing purpose only
-    void RTTRecorder();
+    void RTORecorder();
 
     void responseTimeRecorder(Time responseTime);
 
@@ -182,10 +182,10 @@ protected:
     std::map<std::string, std::string> map_child_nameSec1;
 
 
-    // Timeout check/ RTT measurement
+    // Timeout check/ RTO measurement
     std::map<std::string, ns3::Time> m_timeoutCheck;
     Time m_timeoutThreshold;
-    Time RTT_Timer;
+    Time RTO_Timer;
     int64_t SRTT;
     int64_t RTTVAR;
     int roundRTT;
@@ -209,7 +209,7 @@ protected:
     int iteration;
 
     // For testing purpose, log file
-    std::string RTT_recorder = "src/ndnSIM/examples/log/agg_consumer_RTT_periodical.txt";
+    std::string RTO_recorder = "src/ndnSIM/examples/log/agg_consumer_RTO_periodical.txt";
     std::string responseTime_recorder = "src/ndnSIM/examples/log/agg_consumer_RTT_packet.txt";
     int suspiciousPacketCount;
 

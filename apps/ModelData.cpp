@@ -63,19 +63,18 @@ bool deserializeModelData(const std::vector<uint8_t>& buffer, ModelData& modelDa
             return false;
         }
 
-        uint32_t strlength;
-        std::memcpy(&strlength, buffer.data() + currentIndex, sizeof(uint32_t)); // Copy memory of the string's length
+        uint32_t strLength;
+        std::memcpy(&strLength, buffer.data() + currentIndex, sizeof(uint32_t)); // Copy memory of the string's length
         currentIndex += sizeof(uint32_t);
 
-        if (currentIndex + strlength > buffer.size()) {
+        if (currentIndex + strLength > buffer.size()) {
             std::cout << "Buffer size can't hold string content!" << std::endl;
             return false;
         }
-        std::string str(reinterpret_cast<const char*>(buffer.data() + currentIndex), strlength);
+        std::string str(reinterpret_cast<const char*>(buffer.data() + currentIndex), strLength);
         modelData.congestedNodes.push_back(str);
-        currentIndex += strlength;
+        currentIndex += strLength;
     }
 
     return true;
 }
-

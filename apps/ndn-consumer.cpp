@@ -250,9 +250,9 @@ void
 Consumer::StartApplication() // Called at time specified by Start
 {
     // Open and immediately close the file in write mode to clear it
-    std::ofstream file1(RTT_recorder, std::ios::out);
+    std::ofstream file1(RTO_recorder, std::ios::out);
     if (!file1.is_open()) {
-        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
     }
     file1.close();
 
@@ -262,7 +262,7 @@ Consumer::StartApplication() // Called at time specified by Start
     }
     file2.close();
 
-    Simulator::Schedule(MilliSeconds(5), &Consumer::RTTRecorder, this);
+    Simulator::Schedule(MilliSeconds(5), &Consumer::RTORecorder, this);
 
     // Construct the tree
     ConstructAggregationTree();
@@ -692,10 +692,10 @@ Consumer::OnData(shared_ptr<const Data> data)
             }
 
             // Reset RetxTimer and timeout interval
-            RTT_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
+            RTO_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
             NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
-            NS_LOG_DEBUG("RTT measurement: " << RTT_Timer.GetMilliSeconds() << " ms");
-            m_timeoutThreshold = RTT_Timer;
+            NS_LOG_DEBUG("RTT measurement: " << RTO_Timer.GetMilliSeconds() << " ms");
+            m_timeoutThreshold = RTO_Timer;
 
 
 
@@ -768,22 +768,22 @@ Consumer::RTTThreshldMeasure(int64_t responseTime)
  * Record the RTT every 5 ms, store them in a file
  */
 void
-Consumer::RTTRecorder()
+Consumer::RTORecorder()
 {
     // Open the file using fstream in append mode
-    std::ofstream file(RTT_recorder, std::ios::app);
+    std::ofstream file(RTO_recorder, std::ios::app);
 
     if (!file.is_open()) {
-        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
         return;
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMilliSeconds() << " " << RTT_Timer.GetMilliSeconds() << std::endl;
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << RTO_Timer.GetMilliSeconds() << std::endl;
 
     // Close the file
     file.close();
-    Simulator::Schedule(MilliSeconds(5), &Consumer::RTTRecorder, this);
+    Simulator::Schedule(MilliSeconds(5), &Consumer::RTORecorder, this);
 }
 
 
