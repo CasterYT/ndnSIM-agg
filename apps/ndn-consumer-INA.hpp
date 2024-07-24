@@ -104,6 +104,7 @@ private:
     double m_recPoint;
     double m_beta;
     double m_alpha;
+    double m_gamma;
     double m_addRttSuppress;
     bool m_reactToCongestionMarks;
 

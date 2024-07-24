@@ -139,6 +139,7 @@ Aggregator::Aggregator()
     , m_ssthresh(std::numeric_limits<double>::max())
     , m_highData(0)
     , m_recPoint(0.0)
+    , m_alpha(0.8)
     , m_seq(0)
     , SRTT(0)
     , RTTVAR(0)
@@ -292,6 +293,26 @@ Aggregator::CheckRetxTimeout()
 
 
 /**
+ * Based on RTT of the first iteration, compute their RTT average as threshold, use the threshold for congestion control
+ * @param responseTime
+ */
+void
+Aggregator::RTTThresholdMeasure(int64_t responseTime)
+{
+    RTT_threshold_vec.push_back(responseTime);
+    if (RTT_threshold_vec.size() == numChild) {
+        int64_t sum = 0;
+        for (int64_t item: RTT_threshold_vec) {
+            sum += item;
+        }
+        RTT_threshold = 1.5 * (sum / numChild);
+        NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
+    }
+}
+
+
+
+/**
  * Measure new RTO
  * @param resTime
  * @return New RTO
@@ -322,7 +343,7 @@ void
 Aggregator::OnTimeout(std::string nameString)
 {
     /// Designed for AIMD
-    WindowDecrease();
+    WindowDecrease("timeout");
 
     if (m_inFlight > static_cast<uint32_t>(0)){
         m_inFlight--;
@@ -421,16 +442,20 @@ Aggregator::StopApplication()
  * @param data
  * @param dataName
  */
-void Aggregator::aggregate(const ModelData& data, const std::string& dataName) {
+void Aggregator::aggregate(const ModelData& data, const uint32_t& seq) {
     // first initialization
-    if (sumParameters.find(dataName) == sumParameters.end()){
-        sumParameters[dataName] = std::vector<float>(300, 0.0f);
-        count[dataName] = 0;
+    if (sumParameters.find(seq) == sumParameters.end()){
+        sumParameters[seq] = std::vector<float>(300, 0.0f);
+        count[seq] = 0;
     }
 
     // Aggregate data
-    std::transform(sumParameters[dataName].begin(), sumParameters[dataName].end(), data.parameters.begin(), sumParameters[dataName].begin(), std::plus<float>());
-    count[dataName]++;
+    std::transform(sumParameters[seq].begin(), sumParameters[seq].end(), data.parameters.begin(), sumParameters[seq].begin(), std::plus<float>());
+
+    // Aggregate congestion signal
+    congestionSignalList[seq].insert(congestionSignalList[seq].end(), data.congestedNodes.begin(), data.congestedNodes.end());
+
+    count[seq]++;
 }
 
 
@@ -440,10 +465,24 @@ void Aggregator::aggregate(const ModelData& data, const std::string& dataName) {
  * @param dataName
  * @return Data content
  */
-ModelData Aggregator::getMean(const std::string& dataName){
+ModelData Aggregator::getMean(const uint32_t& seq){
     ModelData result;
-    if (sumParameters.find(dataName) != sumParameters.end()) {
-        result.parameters = sumParameters[dataName];  // Direct assignment
+    if (sumParameters.find(seq) != sumParameters.end() && congestionSignalList.find(seq) != congestionSignalList.end()) {
+        result.parameters = sumParameters[seq];
+
+        // Add congestionSignal of current node if necessary
+        if (congestionSignal[seq]) {
+            congestionSignalList[seq].push_back(m_prefix.toUri());
+            NS_LOG_DEBUG("Congestion detected on current node!");
+        }
+
+
+        result.congestedNodes = congestionSignalList[seq];
+
+
+    } else {
+        NS_LOG_DEBUG("Error when get aggregation result, please exit and check!");
+        ns3::Simulator::Stop();
     }
 
     return result;
@@ -537,7 +576,7 @@ Aggregator::WindowIncrease()
  * Decrease cwnd
  */
 void
-Aggregator::WindowDecrease()
+Aggregator::WindowDecrease(std::string type)
 {
     if (!m_useCwa || m_highData > m_recPoint) {
         const double diff = m_seq - m_highData;
@@ -546,8 +585,13 @@ Aggregator::WindowDecrease()
         m_recPoint = m_seq + (m_addRttSuppress * diff);
 
         // AIMD
-        m_ssthresh = m_window * m_beta;
-        m_window = m_ssthresh;
+        if (type == "timeout") {
+            m_ssthresh = m_window * m_beta;
+            m_window = m_ssthresh;
+        } else if (type == "RTT_threshold") {
+            m_ssthresh = m_window * m_alpha;
+            m_window = m_ssthresh;
+        }
 
         // Window size can't be reduced below initial size
         if (m_window < m_initialWindow) {
@@ -579,7 +623,7 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
     NS_LOG_INFO("interestType: " << interestType);
     if (interestType == "data") {
 
-        // Parse incoming interest, retrieve their name segments, currently use "/NextHop/Destination/Type/SeqNum"
+        // Parse incoming interest, retrieve their name segments, currently use "/NextHop/Destination/Type/Seq"
         std::string dest = interest->getName().get(1).toUri();
         uint32_t seq = interest->getName().get(-1).toSequenceNumber();
         std::string originalName = interest->getName().toUri();
@@ -645,6 +689,9 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
             }
         }
         aggregationMap = aggTreeProcessStrings(inputs);
+
+        // Define for new congestion control
+        numChild = static_cast<int> (aggregationMap.size());
 
         // testing, delete later!!!!
         if (aggregationMap.empty())
@@ -781,7 +828,6 @@ Aggregator::OnData(shared_ptr<const Data> data)
     NS_LOG_INFO("The incoming data packet size is: " << data->wireEncode().size());
 
     std::string dataName = data->getName().toUri();
-    std::string seqNum = data->getName().get(-1).toUri();
     uint32_t seq = data->getName().at(-1).toSequenceNumber();
 
     // Stop checking timeout associated with this seq
@@ -790,50 +836,18 @@ Aggregator::OnData(shared_ptr<const Data> data)
     else
         NS_LOG_DEBUG("Data " << dataName << " doesn't exist in the map, please check!");
 
-    /// Designed for AIMD
-    if (m_highData < seq) {
-        m_highData = seq;
-    }
 
-    if (data->getCongestionMark() > 0) {
-        if (m_reactToCongestionMarks) {
-            NS_LOG_DEBUG("Received congestion mark: " << data->getCongestionMark());
-            WindowDecrease();
-        }
-        else {
-            NS_LOG_DEBUG("Ignored received congestion mark: " << data->getCongestionMark());
-        }
-    } else {
-        WindowIncrease();
-    }
-
-    if (m_inFlight > static_cast<uint32_t>(0)) {
-        m_inFlight--;
-    }
-
-    NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
-
-    //ScheduleNextPacket();
-
-
-    // Check what are the exact names of data waiting for aggregation
+    // Perform data name matching with interest name
     ModelData modelData;
+
+    // Initialize congestionSignal for new iteration
+    if (sumParameters.find(seq) == sumParameters.end())
+        congestionSignal[seq] = false;
+
     auto data_map = map_agg_oldSeq_newName.find(seq);
     if (data_map != map_agg_oldSeq_newName.end())
     {
         NS_LOG_INFO("Received data name: " << data->getName().toUri());
-
-        auto& vec = data_map->second;
-        auto vecIt = std::find(vec.begin(), vec.end(), dataName);
-        std::vector<uint8_t> oldbuffer(data->getContent().value(), data->getContent().value() + data->getContent().value_size());
-
-        if (deserializeModelData(oldbuffer, modelData) && vecIt != vec.end()) {
-            aggregate(modelData, seqNum);
-            vec.erase(vecIt);
-        } else{
-            NS_LOG_INFO("Data name doesn't exist in map_agg_oldSeq_newName, meaning this data packet is duplicate, do nothing!");
-            return;
-        }
 
         // Response time computation (RTT)
         if (currentTime.find(dataName) != currentTime.end()){
@@ -848,12 +862,65 @@ Aggregator::OnData(shared_ptr<const Data> data)
         NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
         NS_LOG_DEBUG("RTT measurement: " << RTT_Timer.GetMilliSeconds() << " ms");
 
+        // Set RTT_threshold to control cwnd
+        if (RTT_threshold_vec.size() < numChild) {
+            RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds());
+        }
 
-        // Check the mapping to judge whether the aggregation process is done
+
+        /// AIMD begins
+        if (m_highData < seq) {
+            m_highData = seq;
+        }
+
+        if (data->getCongestionMark() > 0) {
+            if (m_reactToCongestionMarks) {
+                NS_LOG_DEBUG("Received congestion mark: " << data->getCongestionMark());
+                WindowDecrease("RTT_threshold");
+            }
+            else {
+                NS_LOG_DEBUG("Ignored received congestion mark: " << data->getCongestionMark());
+            }
+        }
+        else if (RTT_threshold != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
+            NS_LOG_DEBUG("Congestion detected on aggregator, mark the signal as true!");
+            congestionSignal[seq] = true;
+            //WindowDecrease("RTT_threshold");
+        }
+        else {
+            WindowIncrease();
+        }
+
+        if (m_inFlight > static_cast<uint32_t>(0)) {
+            m_inFlight--;
+        }
+
+        NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
+
+        //ScheduleNextPacket();
+        /// AIMD ends
+
+
+        // Aggregation starts
+        auto& vec = data_map->second;
+        auto vecIt = std::find(vec.begin(), vec.end(), dataName);
+        std::vector<uint8_t> oldbuffer(data->getContent().value(), data->getContent().value() + data->getContent().value_size());
+
+        if (deserializeModelData(oldbuffer, modelData) && vecIt != vec.end()) {
+            aggregate(modelData, seq);
+            vec.erase(vecIt);
+        } else{
+            NS_LOG_INFO("Data name doesn't exist in map_agg_oldSeq_newName, meaning this data packet is duplicate, do nothing!");
+            return;
+        }
+
+
+
+        // Check whether the aggregation of current iteration is done
         if (vec.empty()){
             NS_LOG_DEBUG("Aggregation finished.");
             // reset the aggregation count
-            count[seqNum] = 0;
+            count[seq] = 0;
 
             // Aggregation time computation
             if (aggregateStartTime.find(seq) != aggregateStartTime.end()) {
@@ -865,9 +932,9 @@ Aggregator::OnData(shared_ptr<const Data> data)
                 NS_LOG_DEBUG("Error when calculating aggregation time, no reference found for seq " << seq);
             }
 
-            // Add them together, perform average at consumer!!!!
+            // Get aggregation result for current iteration
             std::vector<uint8_t> newbuffer;
-            serializeModelData(getMean(seqNum), newbuffer);
+            serializeModelData(getMean(seq), newbuffer);
 
             // create data packet
             auto data = make_shared<Data>();
@@ -897,6 +964,7 @@ Aggregator::OnData(shared_ptr<const Data> data)
         }
     }else{
         NS_LOG_DEBUG("Error, data name can't be recognized!");
+        ns3::Simulator::Stop();
     }
 }
 

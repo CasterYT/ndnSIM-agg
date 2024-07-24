@@ -94,8 +94,9 @@ ConsumerINA::ConsumerINA()
     , m_ssthresh(std::numeric_limits<double>::max())
     , m_highData(0)
     , m_recPoint(0.0)
+    , m_alpha(0.7)
+    , m_gamma(0.8)
 {
-    m_alpha = 0.8;
     // Open and immediately close the file in write mode to clear it
     std::ofstream file1(windowTimeRecorder, std::ios::out);
     if (!file1.is_open()) {
@@ -183,14 +184,19 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
     if (data->getCongestionMark() > 0) {
         if (m_reactToCongestionMarks) {
             NS_LOG_DEBUG("Received congestion mark: " << data->getCongestionMark());
-            WindowDecrease("RTT_threshold");
+            WindowDecrease("ConsumerCongestion");
         }
         else {
             NS_LOG_DEBUG("Ignored received congestion mark: " << data->getCongestionMark());
         }
     }
+    // ToDo: Modify the condition to make it only contain a bool format congestion signal
     else if (RTT_threshold != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
-        WindowDecrease("RTT_threshold");
+        WindowDecrease("ConsumerCongestion");
+    }
+    else if (congestionSignalAgg) {
+        NS_LOG_INFO("Congestion signal exists in aggregator!");
+        WindowDecrease("AggregatorCongestion");
     }
     else {
         WindowIncrease();
@@ -285,8 +291,11 @@ ConsumerINA::WindowDecrease(std::string type)
         if (type == "timeout") {
             m_ssthresh = m_window * m_beta;
             m_window = m_ssthresh;
-        } else if (type == "RTT_threshold") {
+        } else if (type == "ConsumerCongestion") {
             m_ssthresh = m_window * m_alpha;
+            m_window = m_ssthresh;
+        } else if (type == "AggregatorCongestion") {
+            m_ssthresh = m_window * m_gamma;
             m_window = m_ssthresh;
         }
 

@@ -76,12 +76,12 @@ public:
 
     void WindowIncrease();
 
-    void WindowDecrease();
+    void WindowDecrease(std::string type);
 
     // Data aggregation
-    void aggregate(const ModelData& data, const std::string& dataName);
+    void aggregate(const ModelData& data, const uint32_t& seq);
 
-    ModelData getMean(const std::string& dataName);
+    ModelData getMean(const uint32_t& seq);
 
 
     // Compute RTT/ Aggregation time
@@ -98,6 +98,9 @@ public:
     GetAggregateTimeAverage();
 
     Time RTOMeasurement(int64_t resTime);
+
+    // Measure threshold for congestion control
+    void RTTThresholdMeasure(int64_t responseTime);
 
 
     // Parse the received aggregation tree
@@ -140,6 +143,11 @@ public:
     typedef void (*FirstInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, uint32_t retxCount, int32_t hopCount);
 
 protected:
+    // New congestion/rate control
+    int numChild;
+    std::vector<int64_t> RTT_threshold_vec;
+    int64_t RTT_threshold;
+
     // Window measurement design
     uint32_t m_initialWindow;
     TracedValue<double> m_window;;
@@ -151,6 +159,7 @@ protected:
     bool m_useCwa;
     uint32_t m_highData;
     double m_recPoint;
+    double m_alpha;
     double m_beta;
     double m_addRttSuppress;
     bool m_reactToCongestionMarks;
@@ -193,8 +202,10 @@ protected:
     std::map<uint32_t, std::string> m_agg_newDataName; // whole name
 
     // Actual aggregation operations
-    std::map<std::string, std::vector<float>> sumParameters; // result after performing mean average aggregation
-    std::map<std::string, int> count; // count of aggregation
+    std::map<uint32_t, std::vector<float>> sumParameters; // result after performing mean average aggregation
+    std::map<uint32_t, int> count; // count of aggregation
+    std::map<uint32_t, std::vector<std::string>> congestionSignalList; // result after aggregating congestion signal
+    std::map<uint32_t, bool> congestionSignal; // congestion signal for current node
 
 
     // Response/Aggregation time measurement

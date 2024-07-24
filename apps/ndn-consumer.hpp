@@ -105,7 +105,7 @@ public:
 
 
     // Measure threshold for congestion control
-    void RTTThreshldMeasure(int64_t responseTime);
+    void RTTThresholdMeasure(int64_t responseTime);
 
     // Based on response time, measure RTT for each round
     Time RTOMeasurement(int64_t resTime);
@@ -194,6 +194,7 @@ protected:
     // Designed for actual aggregation operations
     std::map<std::string, std::vector<float>> sumParameters;
     int producerCount;
+    bool congestionSignalAgg;
 
 
     // defined for response time

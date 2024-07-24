@@ -22,6 +22,7 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <chrono>
 
 #include "ndn-consumer.hpp"
 #include "ns3/ptr.h"
@@ -61,6 +62,8 @@
 #include "src/ndnSIM/apps/algorithm/utility/utility.hpp"
 
 NS_LOG_COMPONENT_DEFINE("ndn.Consumer");
+
+using namespace std::chrono;
 
 namespace ns3 {
 namespace ndn {
@@ -249,7 +252,7 @@ Consumer::ConstructAggregationTree()
 void
 Consumer::StartApplication() // Called at time specified by Start
 {
-    // Open and immediately close the file in write mode to clear it
+    // Clear the log file
     std::ofstream file1(RTO_recorder, std::ios::out);
     if (!file1.is_open()) {
         std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
@@ -266,6 +269,7 @@ Consumer::StartApplication() // Called at time specified by Start
 
     // Construct the tree
     ConstructAggregationTree();
+
     App::StartApplication();
     ScheduleNextPacket();
 }
@@ -641,7 +645,10 @@ Consumer::OnData(shared_ptr<const Data> data)
     std::string type = data->getName().get(-2).toUri();
     uint32_t seq = data->getName().at(-1).toSequenceNumber();
     std::string dataName = data->getName().toUri();
+    congestionSignalAgg = false;
     NS_LOG_INFO ("Received content object: " << boost::cref(*data));
+    NS_LOG_INFO("The incoming data packet size is: " << data->wireEncode().size());
+
 
     // Erase timeout
     if (m_timeoutCheck.find(dataName) != m_timeoutCheck.end())
@@ -653,10 +660,38 @@ Consumer::OnData(shared_ptr<const Data> data)
         std::string seqNum = data->getName().get(-1).toUri();
         std::string name_sec1 = data->getName().get(1).toUri();
 
+        // Perform data name matching with interest name
         ModelData modelData;
         auto data_map = map_agg_oldSeq_newName.find(seq);
         auto data_agg = m_agg_newDataName.find(seq);
         if (data_map != map_agg_oldSeq_newName.end() && data_agg != m_agg_newDataName.end()) {
+
+            // Response time computation (RTT)
+            if (currentTime.find(dataName) != currentTime.end()){
+                responseTime[dataName] = ns3::Simulator::Now() - currentTime[dataName];
+                ResponseTimeSum(responseTime[dataName].GetMilliSeconds());
+                currentTime.erase(dataName);
+                NS_LOG_INFO("Consumer's response time of sequence " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
+            }
+
+            // Record response time
+            responseTimeRecorder(responseTime[dataName]);
+
+            // Setup RTT_threshold based on RTT of the first iteration
+            if (RTT_threshold_vec.size() < numChild) {
+                RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds());
+            } else if (RTT_threshold != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
+                // ToDo: current node is congested
+            } else {
+                NS_LOG_DEBUG("Error happened when handling RTT_threshold!");
+            }
+
+            // Reset RetxTimer and timeout interval
+            RTO_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
+            NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
+            NS_LOG_DEBUG("RTT measurement: " << RTO_Timer.GetMilliSeconds() << " ms");
+            m_timeoutThreshold = RTO_Timer;
+
 
             // This data exist in the map, perform aggregation
             auto& vec = data_map->second;
@@ -667,7 +702,8 @@ Consumer::OnData(shared_ptr<const Data> data)
             std::vector<uint8_t> oldbuffer(data->getContent().value(), data->getContent().value() + data->getContent().value_size());
 
             if (deserializeModelData(oldbuffer, modelData) && vecIt != vec.end() && aggVecIt != aggVec.end()) {
-                aggregate(modelData, seqNum);
+                aggregate(modelData, seqNum); // Aggregate data payload
+                congestionSignalAgg = !modelData.congestedNodes.empty();
                 vec.erase(vecIt);
                 aggVec.erase(aggVecIt);
             } else{
@@ -675,38 +711,16 @@ Consumer::OnData(shared_ptr<const Data> data)
                 return;
             }
 
-            // Response time computation (RTT)
-            if (currentTime.find(dataName) != currentTime.end()){
-                responseTime[dataName] = ns3::Simulator::Now() - currentTime[dataName];
-                ResponseTimeSum(responseTime[dataName].GetMilliSeconds());
-                currentTime.erase(dataName);
-                NS_LOG_INFO("Consumer's response time of sequence " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
-            }
-
-            // Record response time store to a file
-            responseTimeRecorder(responseTime[dataName]);
-
-            // Set RTT_threshold to control cwnd
-            if (RTT_threshold_vec.size() < numChild) {
-                RTTThreshldMeasure(responseTime[dataName].GetMilliSeconds());
-            }
-
-            // Reset RetxTimer and timeout interval
-            RTO_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
-            NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
-            NS_LOG_DEBUG("RTT measurement: " << RTO_Timer.GetMilliSeconds() << " ms");
-            m_timeoutThreshold = RTO_Timer;
-
 
 
             // Check whether aggregation round finished
             if (vec.empty()) {
-                NS_LOG_DEBUG("Aggregation for the round finished. ");
+                NS_LOG_DEBUG("Aggregation round finished. ");
             }
 
             // Judge whether the aggregation iteration has finished
             if (aggVec.empty()) {
-                NS_LOG_DEBUG("Aggregation of iteration " << seq << " has finished!");
+                NS_LOG_DEBUG("Aggregation of iteration " << seq << " finished!");
 
                 /// Perform actual aggregation for those data
                 std::vector<float> aggregationResult = getMean(seqNum);
@@ -716,7 +730,7 @@ Consumer::OnData(shared_ptr<const Data> data)
                 if (aggregateStartTime.find(seq) != aggregateStartTime.end()) {
                     aggregateTime[seq] = ns3::Simulator::Now() - aggregateStartTime[seq];
                     AggregateTimeSum(aggregateTime[seq].GetMilliSeconds());
-                    NS_LOG_DEBUG("Consumer's aggregation time is: " << aggregateTime[seq].GetMilliSeconds() << " for seq " << std::to_string(seq));
+                    NS_LOG_DEBUG("Iteration" << std::to_string(seq) << " aggregation time is: " << aggregateTime[seq].GetMilliSeconds() << " ms");
                     aggregateStartTime.erase(seq);
                 } else {
                     NS_LOG_DEBUG("Error when calculating aggregation time, no reference found for seq " << seq);
@@ -733,6 +747,7 @@ Consumer::OnData(shared_ptr<const Data> data)
             }
         } else {
             NS_LOG_DEBUG("Suspicious data packet, not exist in data map.");
+            ns3::Simulator::Stop();
         }
 
 
@@ -749,7 +764,7 @@ Consumer::OnData(shared_ptr<const Data> data)
  * @param responseTime
  */
 void
-Consumer::RTTThreshldMeasure(int64_t responseTime)
+Consumer::RTTThresholdMeasure(int64_t responseTime)
 {
     RTT_threshold_vec.push_back(responseTime);
     if (RTT_threshold_vec.size() == numChild) {
@@ -757,7 +772,7 @@ Consumer::RTTThreshldMeasure(int64_t responseTime)
         for (int64_t item: RTT_threshold_vec) {
             sum += item;
         }
-        RTT_threshold = 2 * (sum / numChild);
+        RTT_threshold = 1.5 * (sum / numChild);
         NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
     }
 }
