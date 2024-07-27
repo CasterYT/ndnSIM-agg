@@ -2,7 +2,6 @@ How to configure this customized ndnSIM project
 =============
 ---
 
-## Option 1: Clone for a new directory
 
 - Clone from github repository
     ``` shell
@@ -12,49 +11,22 @@ How to configure this customized ndnSIM project
     git clone https://github.com/named-data-ndnSIM/pybindgen.git pybindgen
     git clone --recursive https://github.com/CasterYT/ndnSIM-complete.git ns-3/src/ndnSIM
     ```
-- Build ndnSIM
-    ``` shell
-  cd ns-3
-  ./waf configure --enable-examples -d debug
-  ./waf
-    ```
-- Start simulation
-    ```shell
-  NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator:ndn.Producer ./waf --run agg-aimd-test
-    ```
-
-
-## Option 2: Run simulation for an existing ndnSIM project
-
-- Assume you've cloned the official github repository using the following, if not, please refer to https://ndnsim.net/current/getting-started.html
-    ```shell
-    git clone https://github.com/named-data-ndnSIM/ns-3-dev.git ns-3
-    git clone https://github.com/named-data-ndnSIM/pybindgen.git pybindgen
-    git clone --recursive https://github.com/named-data-ndnSIM/ndnSIM.git ns-3/src/ndnSIM
-    ```
-- For this case, you need to update ndnSIM's source code first, assume you're in `ns-3` directory now
-    ```shell
-    cd src/ndnSIM
-    git init
-    git remote set-url origin https://github.com/CasterYT/ndnSIM-complete.git
-  ```
-  To check whether the remote link is set correctly
-    ```shell
-    git remote -v
-    ```
-- Update ndnSIM's source code
-    ```shell
-    git pull origin master
-    ```
-- Re-build the entire project, go back to `ns-3` directory first
-    ```shell
+  - Build ndnSIM
+      ``` shell
+    cd ns-3
     ./waf configure --enable-examples -d debug
     ./waf
-    ```
-
-- Start simulation
+      ```
+    - Start simulation (make sure you're under ndnSIM/ns-3 directory)
+        ```shell
+        ./cfnagg_run.sh
+        ```
+      The shell will ask for some input parameters, I show an example in the following:
     ```shell
-  NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator:ndn.Producer ./waf --run agg-aimd-test
+      Enter the number of producers: 50
+      Enter the number of aggregators: 20
+      Enter the number of producers connected with one edge forwarder: 5
+      Enter the bit rate: 5Mbps
     ```
 
 

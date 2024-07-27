@@ -190,8 +190,8 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
             NS_LOG_DEBUG("Ignored received congestion mark: " << data->getCongestionMark());
         }
     }
-    // ToDo: Modify the condition to make it only contain a bool format congestion signal
-    else if (RTT_threshold != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
+    else if (congestionSignalCon) {
+        NS_LOG_INFO("Congestion signal exists in consumer!");
         WindowDecrease("ConsumerCongestion");
     }
     else if (congestionSignalAgg) {
@@ -199,6 +199,7 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
         WindowDecrease("AggregatorCongestion");
     }
     else {
+        NS_LOG_INFO("No congestion, increase the cwnd.");
         WindowIncrease();
     }
 

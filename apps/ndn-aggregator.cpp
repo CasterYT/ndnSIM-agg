@@ -305,7 +305,7 @@ Aggregator::RTTThresholdMeasure(int64_t responseTime)
         for (int64_t item: RTT_threshold_vec) {
             sum += item;
         }
-        RTT_threshold = 1.5 * (sum / numChild);
+        RTT_threshold = 1.2 * (sum / numChild);
         NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
     }
 }

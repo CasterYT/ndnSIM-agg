@@ -166,6 +166,7 @@ protected:
 
     // Global sequence number
     uint32_t globalSeq;
+    uint32_t numRound;
     int roundSendInterest;
 
 
@@ -175,6 +176,9 @@ protected:
     // Used in constructing aggregation Tree
     std::vector<std::map<std::string, std::vector<std::string>>> aggregationTree;
     std::vector<std::vector<std::string>> subTree;
+
+    // Broadcast aggregation tree
+    bool broadcastSync;
 
     // Check whether the aggregation has finished
     std::map<uint32_t, std::vector<std::string>> map_agg_oldSeq_newName; // Manager name for a round within iteration
@@ -194,8 +198,10 @@ protected:
     // Designed for actual aggregation operations
     std::map<std::string, std::vector<float>> sumParameters;
     int producerCount;
-    bool congestionSignalAgg;
 
+    // Congestion signal
+    bool congestionSignalAgg;
+    bool congestionSignalCon;
 
     // defined for response time
     std::map<std::string, ns3::Time> currentTime;

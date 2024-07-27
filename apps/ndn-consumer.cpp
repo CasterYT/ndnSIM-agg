@@ -118,6 +118,7 @@ Consumer::Consumer()
     : RTT_threshold(0)
     , globalSeq(0)
     , roundSendInterest(0)
+    , broadcastSync(false)
     , m_rand(CreateObject<UniformRandomVariable>())
     , m_seq(0)
     , total_response_time(0)
@@ -140,6 +141,7 @@ void
 Consumer::TreeBroadcast()
 {
      const auto& broadcastTree = aggregationTree[0];
+     numRound = aggregationTree.size();
 
      uint32_t seq = 0;
 
@@ -185,7 +187,7 @@ Consumer::ConstructAggregationTree()
 {
      App::ConstructAggregationTree();
      AggregationTree tree(filename);
-     int C = 10;
+     int C = 5;
      std::vector<std::string> dataPointNames = Utility::getProducers(filename);
      std::map<std::string, std::vector<std::string>> rawAggregationTree;
      std::vector<std::vector<std::string>> rawSubTree;
@@ -194,19 +196,22 @@ Consumer::ConstructAggregationTree()
      if (tree.aggregationTreeConstruction(dataPointNames, C)) {
          rawAggregationTree = tree.aggregationAllocation;
          rawSubTree = tree.noCHTree;
+     } else {
+         NS_LOG_DEBUG("Fail to construct aggregation tree!");
+         ns3::Simulator::Stop();
      }
 
      // Get the number of producers
      producerCount = Utility::countProducers(filename);
-     NS_LOG_INFO("The number of producers is: " << producerCount);
+     //NS_LOG_INFO("The number of producers is: " << producerCount);
 
      for (const auto& item : dataPointNames) {
          proList += item + ".";
      }
      proList.resize(proList.size() - 1);
-     NS_LOG_INFO("proList: " << proList);
+     //NS_LOG_INFO("proList: " << proList);
 
-     std::cout << "Aggregation tree: " << std::endl;
+     std::cout << "\nAggregation tree: " << std::endl;
      for (const auto& pair : rawAggregationTree) {
          std::cout << pair.first << ": ";
          for (const auto& item : pair.second) {
@@ -231,7 +236,7 @@ Consumer::ConstructAggregationTree()
          rawSubTree.erase(rawSubTree.begin());
      }
 
-     std::cout << "Test aggregationTree variable." << std::endl;
+     std::cout << "\nIterate all aggregation tree (including main tree and sub-trees)." << std::endl;
      for (const auto& map : aggregationTree) {
          for (const auto& pair : map) {
              std::cout << pair.first << ": ";
@@ -549,11 +554,15 @@ Consumer::SendPacket()
         }
     }
 
+    // Broadcast aggregation tree in iteration0
     if (globalSeq == 0) {
         TreeBroadcast();
         globalSeq = ++m_seq;
-    } else {
-
+    }
+    // Start sending actual packets from iteration1
+    else {
+        /// "roundSendInterest" represents current round, if there's no sub-tree, there's only one round in each iteration;
+        /// otherwise, the number of round represents the number of sub-trees
         // Start computing aggregation time
         if (roundSendInterest == 0)
             aggregateStartTime[globalSeq] = ns3::Simulator::Now();
@@ -646,6 +655,7 @@ Consumer::OnData(shared_ptr<const Data> data)
     uint32_t seq = data->getName().at(-1).toSequenceNumber();
     std::string dataName = data->getName().toUri();
     congestionSignalAgg = false;
+    congestionSignalCon = false;
     NS_LOG_INFO ("Received content object: " << boost::cref(*data));
     NS_LOG_INFO("The incoming data packet size is: " << data->wireEncode().size());
 
@@ -681,7 +691,7 @@ Consumer::OnData(shared_ptr<const Data> data)
             if (RTT_threshold_vec.size() < numChild) {
                 RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds());
             } else if (RTT_threshold != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
-                // ToDo: current node is congested
+                congestionSignalCon = true;
             } else {
                 NS_LOG_DEBUG("Error happened when handling RTT_threshold!");
             }
@@ -739,8 +749,8 @@ Consumer::OnData(shared_ptr<const Data> data)
             }
 
             /// Stop simulation
-            if (iteration == 100) {
-                NS_LOG_DEBUG("Reach 100 iterations, stop!");
+            if (iteration == 200) {
+                NS_LOG_DEBUG("Reach 200 iterations, stop!");
                 ns3::Simulator::Stop();
                 NS_LOG_INFO("The average aggregation time of Consumer in " << iteration << " iteration is: " << GetAggregateTimeAverage() << " ms");
                 return;
@@ -772,7 +782,7 @@ Consumer::RTTThresholdMeasure(int64_t responseTime)
         for (int64_t item: RTT_threshold_vec) {
             sum += item;
         }
-        RTT_threshold = 1.5 * (sum / numChild);
+        RTT_threshold = 1.2 * (sum / numChild);
         NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
     }
 }

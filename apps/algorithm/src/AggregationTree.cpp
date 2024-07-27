@@ -156,41 +156,47 @@ bool AggregationTree::aggregationTreeConstruction(std::vector<std::string> dataP
     }
 
 
-    std::cout << "\nCurrent CHList for CH allocation later: " << std::endl;
+    std::cout << "\nCurrent CH candidates: " << std::endl;
     for (const auto& item : CHList) {
         std::cout << item << std::endl;
     }
 
-    // Start CH allocation, currently ignore those can't find cluster head
+    // Start CH allocation
     std::vector<std::string> newDataPoints;
     std::cout << "\nStarting CH allocation." << std::endl;
     for (const auto& clusterNodes : newCluster) {
         std::string clusterHead = findCH(clusterNodes, CHList, globalClient);
+         // "globalClient" doesn't exist in candidate list, if CH == globalClient, it means no CH is found
         if (clusterHead != globalClient) {
             CHList.erase(std::remove(CHList.begin(), CHList.end(), clusterHead), CHList.end());
             aggregationAllocation[clusterHead] = clusterNodes;
-            newDataPoints.push_back(clusterHead);
+            newDataPoints.push_back(clusterHead); // If newDataPoints are more than C, perform tree construction for next layer
         }
         else {
-            std::cout << "Due to no cluster head found, combine these nodes into sub-tree." << std::endl;
+            std::cout << "No cluster head found for current cluster, combine them into sub-tree." << std::endl;
             noCHTree.push_back(clusterNodes);
         }
 
     }
 
-    std::cout << "\nCHList after CH allocation: " << std::endl;
+    std::cout << "\nThe rest CH candidates after CH allocation: " << std::endl;
     for (const auto& item : CHList) {
         std::cout << item << std::endl;
     }
 
+
+
     if (newDataPoints.size() < C){
-        // If with an entire layer, no CH found, then extract one from subTree list
-        if (newDataPoints.empty()){
+
+        if (newDataPoints.empty()) // If all clusters can't find CH, allocate the first sub-tree to aggregationAllocation for first round, then iterate other sub-trees in later rounds
+        {
+            // Move the first sub-tree to "aggregationAllocation"
             const auto& firstSubTree = noCHTree[0];
             aggregationAllocation[globalClient] = firstSubTree;
             noCHTree.erase(noCHTree.begin());
             return true;
-        } else {
+        } else // If some clusters can find CH, put them into aggregationAllocation for first round, iterate other sub-trees in later rounds
+        {
             aggregationAllocation[globalClient] = newDataPoints;
             return true;
         }
