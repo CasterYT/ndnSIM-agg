@@ -32,6 +32,7 @@
 #include <vector>
 #include <map>
 
+
 //#include "aggregationTree.hpp"
 #include "src/ndnSIM/apps/algorithm/include/AggregationTree.hpp"
 #include "src/ndnSIM/apps/algorithm/utility/utility.hpp"
@@ -135,6 +136,25 @@ App::getLeafNodes(const std::string& key, const std::map<std::string, std::vecto
     }
     return result;
 }
+
+
+
+int
+App::findRoundIndex(const std::vector<std::vector<std::string>>& roundVec, const std::string& target)
+{
+    for (int i = 0; i < roundVec.size(); ++i) {
+        for (int j = 0; j < roundVec[i].size(); ++j) {
+            if (roundVec[i][j] == target) {
+                return i; // Return index
+            }
+        }
+    }
+    std::cout << "Error! Can't find round index" << std::endl;
+    return -1;
+}
+
+
+
 
 
 void

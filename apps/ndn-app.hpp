@@ -25,6 +25,8 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <iostream>
+#include <optional>
 
 #include "ns3/ndnSIM/model/ndn-common.hpp"
 #include "ns3/ndnSIM/model/ndn-app-link-service.hpp"
@@ -35,8 +37,6 @@
 #include "ns3/callback.h"
 #include "ns3/traced-callback.h"
 
-#include <vector>
-#include <string>
 
 namespace ns3 {
 
@@ -128,10 +128,10 @@ protected:
   std::map<std::string, std::set<std::string>>
   getLeafNodes(const std::string& key, const std::map<std::string, std::vector<std::string>>& treeMap);
 
+  int findRoundIndex(const std::vector<std::vector<std::string>>& roundVec, const std::string& target);
 
 // New design for tree topology to get child node info
 public:
-
     std::map<std::string, std::vector<std::string>> m_linkInfo;
 
 protected:

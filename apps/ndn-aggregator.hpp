@@ -112,7 +112,9 @@ public:
     // For testing purpose, measure the consumer's window
     void WindowRecorder();
 
-    void RTT_Recorder();
+    void RTO_Recorder();
+
+    void responseTimeRecorder(Time responseTime);
 
 
 
@@ -143,6 +145,9 @@ public:
     typedef void (*FirstInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, uint32_t retxCount, int32_t hopCount);
 
 protected:
+    // Tree broadcast synchronization
+    bool treeSync;
+
     // New congestion/rate control
     int numChild;
     std::vector<int64_t> RTT_threshold_vec;
@@ -154,7 +159,7 @@ protected:
     TracedValue<uint32_t> m_inFlight;
     bool m_setInitialWindowOnTimeout;
 
-    // AIMD design, important!!!!!!
+    // AIMD cwnd management
     double m_ssthresh;
     bool m_useCwa;
     uint32_t m_highData;
@@ -180,7 +185,7 @@ protected:
     Name m_keyLocator;
 
 
-    // Important queue definition, tuple: interest name(string), seq(uint32_t), resKey(string)
+    // Interest queue definition (interest name)
     std::queue<shared_ptr<Name>> interestQueue;
 
     // Timeout check and RTT measurement
@@ -189,13 +194,12 @@ protected:
     int64_t SRTT;
     int64_t RTTVAR;
     int roundRTT;
-    Time RTT_Timer;
+    Time RTO_Timer;
 
     // For testing purpose, log file
-    //std::string RTT_recorder = "src/ndnSIM/examples/log/agg_response_time.txt";
-    //std::string windowTimeRecorder = "src/ndnSIM/examples/log/agg_consumer_window.txt";
-    std::string RTT_recorder;
+    std::string RTO_recorder;
     std::string windowTimeRecorder;
+    std::string responseTime_recorder;
 
     // Aggregation
     std::map<uint32_t, std::vector<std::string>> map_agg_oldSeq_newName; // name segments in vector

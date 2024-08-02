@@ -399,23 +399,35 @@ Aggregator::StartApplication()
     App::StartApplication();
     FibHelper::AddRoute(GetNode(), m_prefix, m_face, 0);
 
+    // Initialize the synchronization signal
+    treeSync = false;
+
     // For testing purpose
-    RTT_recorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_RTT.txt";
+    RTO_recorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_RTO.txt";
     windowTimeRecorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_window.txt";
+    responseTime_recorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_RTT.txt";
 
     // Open and immediately close the file in write mode to clear it
-    std::ofstream file1(RTT_recorder, std::ios::out);
+    std::ofstream file1(RTO_recorder, std::ios::out);
     std::ofstream file2(windowTimeRecorder, std::ios::out);
+    std::ofstream file3(responseTime_recorder, std::ios::out);
     if (!file1.is_open()) {
-        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
+        Simulator::Stop();
     }
     if (!file2.is_open()) {
-        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
+        Simulator::Stop();
+    }
+    if (!file3.is_open()) {
+        std::cerr << "Failed to open thenfile: " << responseTime_recorder << std::endl;
+        Simulator::Stop();
     }
     file1.close(); // Optional here since file will be closed automatically
     file2.close();
+    file3.close();
 
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTT_Recorder, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTO_Recorder, this);
     Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);
 }
 
@@ -645,6 +657,11 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
             aggregateStartTime[seq] = ns3::Simulator::Now();
 
         // iterate all child nodes in a loop, assign the "name" based on child node's prefix
+        if (!treeSync){
+            NS_LOG_DEBUG("Error! No aggregation tree info!");
+            ns3::Simulator::Stop();
+        }
+
         for (const auto& [child, leaves] : aggregationMap) {
             std::string name_sec1;
             std::string name;
@@ -679,8 +696,10 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
             m_agg_newDataName[seq] = originalName;
         }
         //ScheduleNextPacket();
-
     } else if (interestType == "initialization") {
+        // Synchronize signal
+        treeSync = true;
+
         // Extract useful info and parse it into readable format
         std::vector<std::string> inputs;
         if (interest->getName().size() > 3) {
@@ -856,11 +875,14 @@ Aggregator::OnData(shared_ptr<const Data> data)
             currentTime.erase(dataName);
         }
 
+        // Record RTT
+        responseTimeRecorder(responseTime[dataName]);
+
         // Reset RetxTimer and timeout interval
-        RTT_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
-        m_timeoutThreshold = RTT_Timer;
+        RTO_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
+        m_timeoutThreshold = RTO_Timer;
         NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
-        NS_LOG_DEBUG("RTT measurement: " << RTT_Timer.GetMilliSeconds() << " ms");
+        NS_LOG_DEBUG("RTT measurement: " << RTO_Timer.GetMilliSeconds() << " ms");
 
         // Set RTT_threshold to control cwnd
         if (RTT_threshold_vec.size() < numChild) {
@@ -994,22 +1016,45 @@ Aggregator::WindowRecorder()
  * Record RTT every 5 ms, and store them in a file
  */
 void
-Aggregator::RTT_Recorder()
+Aggregator::RTO_Recorder()
 {
     // Open the file using fstream in append mode
-    std::ofstream file(RTT_recorder, std::ios::app);
+    std::ofstream file(RTO_recorder, std::ios::app);
 
     if (!file.is_open()) {
-        std::cerr << "Failed to open the file: " << RTT_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
         return;
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMilliSeconds() << " " << RTT_Timer.GetMilliSeconds() << std::endl;
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << RTO_Timer.GetMilliSeconds() << std::endl;
 
     // Close the file
     file.close();
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTT_Recorder, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTO_Recorder, this);
+}
+
+
+
+/**
+ * Record the response time for each returned packet, store them in a file
+ * @param responseTime
+ */
+void
+Aggregator::responseTimeRecorder(Time responseTime) {
+    // Open the file using fstream in append mode
+    std::ofstream file(responseTime_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
+        return;
+    }
+
+    // Write the response_time to the file, followed by a newline
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << responseTime.GetMilliSeconds() << std::endl;
+
+    // Close the file
+    file.close();
 }
 
 } // namespace ndn

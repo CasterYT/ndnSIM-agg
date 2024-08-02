@@ -105,10 +105,10 @@ public:
 
 
     // Measure threshold for congestion control
-    void RTTThresholdMeasure(int64_t responseTime);
+    void RTTThresholdMeasure(int64_t responseTime, int roundIndex);
 
     // Based on response time, measure RTT for each round
-    Time RTOMeasurement(int64_t resTime);
+    Time RTOMeasurement(int64_t resTime, int roundIndex);
 
 
 
@@ -151,7 +151,9 @@ public:
     std::map<std::string, std::set<std::string>>
     getLeafNodes(const std::string& key,const std::map<std::string, std::vector<std::string>>& treeMap);
 
-
+    // Return round index
+    int
+    findRoundIndex(const std::string& target);
 
 
 
@@ -159,40 +161,46 @@ protected:
     // Topology file name
     std::string filename = "src/ndnSIM/examples/topologies/DataCenterTopology.txt";
 
-    // New congestion/rate control
-    int numChild;
-    std::vector<int64_t> RTT_threshold_vec;
-    int64_t RTT_threshold;
+    // Congestion/rate control
+    std::vector<std::vector<std::string>> globalTreeRound;
+    std::map<int, std::vector<int64_t>> RTT_threshold_vec; // Each mapping represents one round (if there're more than one round)
+    //std::vector<int64_t> RTT_threshold_vec;
+    std::vector<int64_t> RTT_threshold; // Each mapping represents one round (if there're more than one round)
+    //int64_t RTT_threshold;
 
     // Global sequence number
     uint32_t globalSeq;
-    uint32_t numRound;
-    int roundSendInterest;
+    int globalRound;
 
 
     // Get producer list
     std::string proList;
 
-    // Used in constructing aggregation Tree
-    std::vector<std::map<std::string, std::vector<std::string>>> aggregationTree;
-    std::vector<std::vector<std::string>> subTree;
+    // Constructed aggregation Tree
+    std::vector<std::map<std::string, std::vector<std::string>>> aggregationTree; // Entire tree (including main tree and sub-trees)
+    std::vector<std::vector<std::string>> subTree; // Sub-trees (if any)
 
     // Broadcast aggregation tree
     bool broadcastSync;
+    std::vector<std::string> broadcastList;
 
-    // Check whether the aggregation has finished
-    std::map<uint32_t, std::vector<std::string>> map_agg_oldSeq_newName; // Manager name for a round within iteration
+    // Aggregation synchronization
+    std::map<uint32_t, std::vector<std::vector<std::string>>> map_agg_oldSeq_newName; // Manage name for a round within iteration
     std::map<uint32_t, std::vector<std::string>> m_agg_newDataName; // Manage names for entire iteration
     std::map<std::string, std::string> map_child_nameSec1;
 
 
     // Timeout check/ RTO measurement
-    std::map<std::string, ns3::Time> m_timeoutCheck;
-    Time m_timeoutThreshold;
-    Time RTO_Timer;
-    int64_t SRTT;
-    int64_t RTTVAR;
-    int roundRTT;
+    std::map<std::string, ns3::Time> m_timeoutCheck; // Check
+    std::map<int, Time> m_timeoutThreshold;
+    //Time RTO_Timer;
+    std::map<int, Time> RTO_Timer;
+    //int64_t SRTT;
+    std::map<int, int64_t> SRTT;
+    //int64_t RTTVAR;
+    std::map<int, int64_t> RTTVAR;
+    //int roundRTT;
+    std::map<int, bool> initRTO;
 
 
     // Designed for actual aggregation operations

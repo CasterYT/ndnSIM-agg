@@ -126,7 +126,10 @@ ConsumerINA::SendInterest(shared_ptr<Name> newName)
 void
 ConsumerINA::ScheduleNextPacket()
 {
-    if (m_window == static_cast<uint32_t>(0)) {
+    if (!broadcastSync && globalSeq != 0) {
+        NS_LOG_INFO("Haven't finished tree broadcasting synchronization, don't send actual data packet for now.");
+    }
+    else if (m_window == static_cast<uint32_t>(0)) {
         Simulator::Remove(m_sendEvent);
 
         NS_LOG_DEBUG("Error! Window becomes 0!!!!!!");
@@ -135,6 +138,7 @@ ConsumerINA::ScheduleNextPacket()
                                           &Consumer::SendPacket, this);
     }
     else if (m_window - m_inFlight <= 0) {
+        NS_LOG_INFO("Wait until cwnd allows new transmission.");
         // do nothing
     }
     else {
@@ -178,10 +182,10 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
         m_highData = sequenceNum;
     }
 
-    // testing
-    NS_LOG_INFO("RTT in ConsumerINA is: " << responseTime[dataName].GetMilliSeconds() << " ms");
-
-    if (data->getCongestionMark() > 0) {
+    if (!broadcastSync) {
+        NS_LOG_INFO("Currently broadcasting aggregation tree, ignore relevant cwnd/congestion management");
+    }
+    else if (data->getCongestionMark() > 0) {
         if (m_reactToCongestionMarks) {
             NS_LOG_DEBUG("Received congestion mark: " << data->getCongestionMark());
             WindowDecrease("ConsumerCongestion");

@@ -74,6 +74,7 @@ NS_OBJECT_ENSURE_REGISTERED(Consumer);
 
 /**
  * Initiate attributes for consumer class, some of them may be used, some are optional
+ * Note that currently only use "NodePrefix", ignore "Prefix" for now
  *
  * @return Total TypeId
  */
@@ -115,16 +116,12 @@ Consumer::GetTypeId(void)
  * Constructor
  */
 Consumer::Consumer()
-    : RTT_threshold(0)
-    , globalSeq(0)
-    , roundSendInterest(0)
+    : globalSeq(0)
+    , globalRound(0)
     , broadcastSync(false)
     , m_rand(CreateObject<UniformRandomVariable>())
     , m_seq(0)
     , total_response_time(0)
-    , SRTT(0)
-    , RTTVAR(0)
-    , roundRTT(0)
     , round(0)
     , totalAggregateTime(0)
     , iteration(0)
@@ -141,17 +138,14 @@ void
 Consumer::TreeBroadcast()
 {
      const auto& broadcastTree = aggregationTree[0];
-     numRound = aggregationTree.size();
 
      uint32_t seq = 0;
 
      for (const auto& [parentNode, childList] : broadcastTree) {
          // Don't broadcast to itself
          if (parentNode == m_nodeprefix) {
-             numChild = childList.size();
              continue;
          }
-
 
          std::string nameWithType;
          std::string nameType = "initialization";
@@ -185,33 +179,33 @@ Consumer::TreeBroadcast()
 void
 Consumer::ConstructAggregationTree()
 {
-     App::ConstructAggregationTree();
-     AggregationTree tree(filename);
-     int C = 5;
-     std::vector<std::string> dataPointNames = Utility::getProducers(filename);
-     std::map<std::string, std::vector<std::string>> rawAggregationTree;
-     std::vector<std::vector<std::string>> rawSubTree;
+    App::ConstructAggregationTree();
+    AggregationTree tree(filename);
+    int C = 3;
+    std::vector<std::string> dataPointNames = Utility::getProducers(filename);
+    std::map<std::string, std::vector<std::string>> rawAggregationTree;
+    std::vector<std::vector<std::string>> rawSubTree;
 
 
-     if (tree.aggregationTreeConstruction(dataPointNames, C)) {
-         rawAggregationTree = tree.aggregationAllocation;
-         rawSubTree = tree.noCHTree;
-     } else {
-         NS_LOG_DEBUG("Fail to construct aggregation tree!");
-         ns3::Simulator::Stop();
-     }
+    if (tree.aggregationTreeConstruction(dataPointNames, C)) {
+        rawAggregationTree = tree.aggregationAllocation;
+        rawSubTree = tree.noCHTree;
+    } else {
+        NS_LOG_DEBUG("Fail to construct aggregation tree!");
+        ns3::Simulator::Stop();
+    }
 
-     // Get the number of producers
-     producerCount = Utility::countProducers(filename);
-     //NS_LOG_INFO("The number of producers is: " << producerCount);
+    // Get the number of producers
+    producerCount = Utility::countProducers(filename);
 
-     for (const auto& item : dataPointNames) {
-         proList += item + ".";
-     }
-     proList.resize(proList.size() - 1);
-     //NS_LOG_INFO("proList: " << proList);
+    // Create producer list
+    for (const auto& item : dataPointNames) {
+        proList += item + ".";
+    }
+    proList.resize(proList.size() - 1);
 
-     std::cout << "\nAggregation tree: " << std::endl;
+
+/*     std::cout << "\nAggregation tree: " << std::endl;
      for (const auto& pair : rawAggregationTree) {
          std::cout << pair.first << ": ";
          for (const auto& item : pair.second) {
@@ -226,27 +220,62 @@ Consumer::ConstructAggregationTree()
              std::cout << item << " ";
          }
          std::cout << std::endl;
-     }
+     }*/
 
-     aggregationTree.push_back(rawAggregationTree);
-     while (!rawSubTree.empty()) {
-         const auto& item = rawSubTree[0];
-         rawAggregationTree[m_nodeprefix] = item;
-         aggregationTree.push_back(rawAggregationTree);
-         rawSubTree.erase(rawSubTree.begin());
-     }
+    // Create complete "aggregationTree" from raw ones
+    aggregationTree.push_back(rawAggregationTree);
+    while (!rawSubTree.empty()) {
+        const auto& item = rawSubTree[0];
+        rawAggregationTree[m_nodeprefix] = item;
+        aggregationTree.push_back(rawAggregationTree);
+        rawSubTree.erase(rawSubTree.begin());
+    }
 
-     std::cout << "\nIterate all aggregation tree (including main tree and sub-trees)." << std::endl;
-     for (const auto& map : aggregationTree) {
-         for (const auto& pair : map) {
-             std::cout << pair.first << ": ";
-             for (const auto& value : pair.second) {
-                 std::cout << value << " ";
-             }
-             std::cout << std::endl;
-         }
-         std::cout << "----" << std::endl;  // Separator between maps
-     }
+
+    int i = 0;
+    std::cout << "\nIterate all aggregation tree (including main tree and sub-trees)." << std::endl;
+    for (const auto& map : aggregationTree) {
+        for (const auto& pair : map) {
+            std::cout << pair.first << ": ";
+            for (const auto& value : pair.second) {
+                std::cout << value << " ";
+            }
+            std::cout << std::endl;
+
+            // Initialize "broadcastList" for tree broadcasting synchronization
+            if (pair.first != m_nodeprefix) {
+                broadcastList.push_back(pair.first);
+            }
+
+            // Initialize "globalTreeRound" for all rounds (if there're multiple sub-trees)
+            if (pair.first == m_nodeprefix) {
+                std::vector<std::string> leavesRound;
+                std::cout << "Round " << i << " has the following leaf nodes: ";
+                for (const auto& leaves : pair.second) {
+                    leavesRound.push_back(leaves);
+                    std::cout << leaves << " ";
+                }
+                globalTreeRound.push_back(leavesRound);
+                std::cout << std::endl;
+            }
+        }
+        std::cout << "----" << std::endl;  // Separator between maps
+        i++;
+    }
+
+    // Initialize variables for RTO computation/congestion control
+    for (int i = 0; i < globalTreeRound.size(); i++) {
+        initRTO[i] = false;
+        RTO_Timer[i] = 6 * m_retxTimer;
+        m_timeoutThreshold[i] = 6 * m_retxTimer;
+        RTT_threshold.push_back(0);
+    }
+
+    // Testing, delete later
+    NS_LOG_DEBUG("Initialize the following variables.");
+    NS_LOG_DEBUG("RTO_Timer: " << RTO_Timer[0].GetMilliSeconds() << " ms");
+    NS_LOG_DEBUG("m_timeoutThreshold: " << m_timeoutThreshold[0].GetMilliSeconds() << " ms");
+
  }
 
 
@@ -272,10 +301,10 @@ Consumer::StartApplication() // Called at time specified by Start
 
     Simulator::Schedule(MilliSeconds(5), &Consumer::RTORecorder, this);
 
+    App::StartApplication();
+
     // Construct the tree
     ConstructAggregationTree();
-
-    App::StartApplication();
     ScheduleNextPacket();
 }
 
@@ -305,6 +334,19 @@ std::map<std::string, std::set<std::string>>
 Consumer::getLeafNodes(const std::string& key, const std::map<std::string, std::vector<std::string>>& treeMap)
 {
     return App::getLeafNodes(key, treeMap);
+}
+
+
+
+/**
+ * Return round index
+ * @param target
+ * @return Round index
+ */
+int
+Consumer::findRoundIndex(const std::string& target)
+{
+    return App::findRoundIndex(globalTreeRound, target);
 }
 
 
@@ -451,7 +493,7 @@ Consumer::SetRetxTimer(Time retxTimer)
     }
 
     // Schedule new timeout
-    m_timeoutThreshold = 6 * retxTimer;
+    //m_timeoutThreshold = 6 * retxTimer;
     NS_LOG_DEBUG("Next interval to check timeout is: " << m_retxTimer.GetMilliSeconds() << " ms");
     m_retxEvent = Simulator::Schedule(m_retxTimer, &Consumer::CheckRetxTimeout, this);
 }
@@ -478,11 +520,21 @@ Consumer::CheckRetxTimeout()
 {
     Time now = Simulator::Now();
 
-    NS_LOG_DEBUG("Check timeout after: " << m_retxTimer.GetMilliSeconds() << " ms");
-    NS_LOG_DEBUG("Current timeout threshold is: " << m_timeoutThreshold.GetMilliSeconds() << " ms");
+    //NS_LOG_INFO("Check timeout after: " << m_retxTimer.GetMilliSeconds() << " ms");
+    //NS_LOG_INFO("Current timeout threshold is: " << m_timeoutThreshold.GetMilliSeconds() << " ms");
 
     for (auto it = m_timeoutCheck.begin(); it != m_timeoutCheck.end();){
-        if (now - it->second > m_timeoutThreshold) {
+        // Parse the string and extract the first segment, e.g. "agg0", then find out its round
+        // ToDo: add logic to parse packet name
+        size_t start = it->first.find_first_not_of('/');
+        size_t end = it->first.find('/', start);
+        std::string segment1;
+        if (start != std::string::npos) {
+            segment1 = it->first.substr(start, end - start);
+        }
+        int roundIndex = findRoundIndex(segment1);
+
+        if (now - it->second > m_timeoutThreshold[roundIndex]) {
             std::string name = it->first;
             it = m_timeoutCheck.erase(it);
             OnTimeout(name);
@@ -501,17 +553,18 @@ Consumer::CheckRetxTimeout()
  * @return New RTO
  */
 Time
-Consumer::RTOMeasurement(int64_t resTime)
+Consumer::RTOMeasurement(int64_t resTime, int roundIndex)
 {
-    if (roundRTT == 0) {
-        RTTVAR = resTime / 2;
-        SRTT = resTime;
+    if (!initRTO[roundIndex]) {
+        RTTVAR[roundIndex] = resTime / 2;
+        SRTT[roundIndex] = resTime;
+        NS_LOG_DEBUG("Initialize RTO for round: " << roundIndex);
+        initRTO[roundIndex] = true;
     } else {
-        RTTVAR = 0.75 * RTTVAR + 0.25 * std::abs(SRTT - resTime); // RTTVAR = (1 - b) * RTTVAR + b * |SRTT - RTTsample|, where b = 0.25
-        SRTT = 0.875 * SRTT + 0.125 * resTime; // SRTT = (1 - a) * SRTT + a * RTTsample, where a = 0.125
+        RTTVAR[roundIndex] = 0.75 * RTTVAR[roundIndex] + 0.25 * std::abs(SRTT[roundIndex] - resTime); // RTTVAR = (1 - b) * RTTVAR + b * |SRTT - RTTsample|, where b = 0.25
+        SRTT[roundIndex] = 0.875 * SRTT[roundIndex] + 0.125 * resTime; // SRTT = (1 - a) * SRTT + a * RTTsample, where a = 0.125
     }
-    roundRTT++;
-    int64_t RTO = SRTT + 4 * RTTVAR; // RTO = SRTT + K * RTTVAR, where K = 4
+    int64_t RTO = SRTT[roundIndex] + 4 * RTTVAR[roundIndex]; // RTO = SRTT + K * RTTVAR, where K = 4
 
     return MilliSeconds(RTO);
 }
@@ -519,7 +572,7 @@ Consumer::RTOMeasurement(int64_t resTime)
 
 
 /**
- * When ScheduleNextPacket() is invoked, this function is used to get relevant info and send out interests
+ * When ScheduleNextPacket() is invoked, this function is used to get relevant info and prepare to send interests
  */
 void
 Consumer::SendPacket()
@@ -539,36 +592,49 @@ Consumer::SendPacket()
 
         for (const auto& aggTree : aggregationTree) {
             auto initialAllocation = getLeafNodes(m_nodeprefix, aggTree);
+            std::vector<std::string> roundChild;
 
             for (const auto& [child, leaves] : initialAllocation) {
                 std::string name_sec1;
+                roundChild.push_back(child);
+
                 for (const auto& leaf : leaves) {
                     if (std::find(objectProducer.begin(), objectProducer.end(), leaf) != objectProducer.end()) {
                         name_sec1 += leaf + ".";
+                    } else {
+                        NS_LOG_DEBUG("Error when initializing mapping!");
+                        ns3::Simulator::Stop();
                     }
                 }
                 name_sec1.resize(name_sec1.size() - 1);
-                map_child_nameSec1[child] = name_sec1;
-                m_agg_newDataName[globalSeq].push_back(name_sec1);
+                map_child_nameSec1[child] = name_sec1; // Map for interest splitting later
+                m_agg_newDataName[globalSeq].push_back(child); // Map for entire iteration
             }
+            map_agg_oldSeq_newName[globalSeq].push_back(roundChild); // Map for each round within one iteration
         }
     }
 
-    // Broadcast aggregation tree in iteration0
+    // Broadcast aggregation tree in iteration 0
     if (globalSeq == 0) {
-        TreeBroadcast();
+        if (!broadcastList.empty()) {
+            TreeBroadcast();
+        } else {
+            NS_LOG_DEBUG("Error when broadcasting tree to aggregators!");
+            Simulator::Stop();
+        }
         globalSeq = ++m_seq;
     }
-    // Start sending actual packets from iteration1
+    // Start sending actual packets from iteration 1
     else {
-        /// "roundSendInterest" represents current round, if there's no sub-tree, there's only one round in each iteration;
+        /// "globalRound" represents current round, if there's no sub-tree, there's only one round in each iteration;
         /// otherwise, the number of round represents the number of sub-trees
+
         // Start computing aggregation time
-        if (roundSendInterest == 0)
+        if (globalRound == 0)
             aggregateStartTime[globalSeq] = ns3::Simulator::Now();
 
         // Update to sub-tree when there're many sub-trees apart from main tree
-        const auto& aggregationTreeElement = aggregationTree[roundSendInterest];
+        const auto& aggregationTreeElement = aggregationTree[globalRound];
 
         // Get child nodes and leaf nodes
         auto childAllocation = getLeafNodes(m_nodeprefix, aggregationTreeElement);
@@ -586,7 +652,7 @@ Consumer::SendPacket()
             nameWithType = name + "/data";
 
             // Store the divided interests' name
-            map_agg_oldSeq_newName[globalSeq].push_back(name_sec1);
+            //map_agg_oldSeq_newName[globalSeq].push_back(name_sec1);
 
             // Create vector to store interest name for data retransmission
             seqName.push_back(name);
@@ -596,10 +662,10 @@ Consumer::SendPacket()
             SendInterest(newName);
         }
 
-        roundSendInterest++;
-        if (roundSendInterest == aggregationTree.size()) {
+        globalRound++;
+        if (globalRound == aggregationTree.size()) {
             globalSeq = ++m_seq;
-            roundSendInterest = 0;
+            globalRound = 0;
         }
     }
     ScheduleNextPacket();
@@ -669,6 +735,14 @@ Consumer::OnData(shared_ptr<const Data> data)
     if (type == "data") {
         std::string seqNum = data->getName().get(-1).toUri();
         std::string name_sec1 = data->getName().get(1).toUri();
+        std::string name_sec0 = data->getName().get(0).toUri();
+
+/*        /// Test "m_agg_newDataName", delete later
+        NS_LOG_DEBUG("m_agg_newDataName contains: ");
+        for (const auto& item : m_agg_newDataName.at(seq)) {
+            NS_LOG_DEBUG(item);
+        }
+        std::cout << std::endl;*/
 
         // Perform data name matching with interest name
         ModelData modelData;
@@ -687,34 +761,46 @@ Consumer::OnData(shared_ptr<const Data> data)
             // Record response time
             responseTimeRecorder(responseTime[dataName]);
 
+            // Search round index
+            const auto& test_data_map = data_map->second;
+            int roundIndex = findRoundIndex(name_sec0);
+            if (roundIndex == -1) {
+                NS_LOG_DEBUG("Error on roundIndex!");
+                ns3::Simulator::Stop();
+            }
+            NS_LOG_INFO("This packet comes from round " << roundIndex);
+
+
             // Setup RTT_threshold based on RTT of the first iteration
-            if (RTT_threshold_vec.size() < numChild) {
-                RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds());
-            } else if (RTT_threshold != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
+            if (RTT_threshold[roundIndex] == 0) {
+                RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds(), roundIndex);
+            } else if (RTT_threshold[roundIndex] != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold[roundIndex]) {
                 congestionSignalCon = true;
-            } else {
-                NS_LOG_DEBUG("Error happened when handling RTT_threshold!");
             }
 
             // Reset RetxTimer and timeout interval
-            RTO_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
+            RTO_Timer[roundIndex] = RTOMeasurement(responseTime[dataName].GetMilliSeconds(), roundIndex);
             NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
-            NS_LOG_DEBUG("RTT measurement: " << RTO_Timer.GetMilliSeconds() << " ms");
-            m_timeoutThreshold = RTO_Timer;
+            NS_LOG_DEBUG("RTT measurement: " << RTO_Timer[roundIndex].GetMilliSeconds() << " ms");
+            m_timeoutThreshold[roundIndex] = RTO_Timer[roundIndex];
 
 
             // This data exist in the map, perform aggregation
-            auto& vec = data_map->second;
+            ///auto& vec = data_map->second;
             auto& aggVec = data_agg->second;
-            auto vecIt = std::find(vec.begin(), vec.end(), name_sec1);
-            auto aggVecIt = std::find(aggVec.begin(), aggVec.end(), name_sec1);
+            ///auto vecIt = std::find(vec.begin(), vec.end(), name_sec1);
+            auto aggVecIt = std::find(aggVec.begin(), aggVec.end(), name_sec0);
+            //auto aggVecIt = std::find(aggVec.begin(), aggVec.end(), name_sec1);
+
+            /// Test "aggVecIt", delete later
+            NS_LOG_INFO("aggVecIt element contains: " << name_sec1);
 
             std::vector<uint8_t> oldbuffer(data->getContent().value(), data->getContent().value() + data->getContent().value_size());
 
-            if (deserializeModelData(oldbuffer, modelData) && vecIt != vec.end() && aggVecIt != aggVec.end()) {
+            if (deserializeModelData(oldbuffer, modelData) && aggVecIt != aggVec.end()) {
                 aggregate(modelData, seqNum); // Aggregate data payload
                 congestionSignalAgg = !modelData.congestedNodes.empty();
-                vec.erase(vecIt);
+                ///vec.erase(vecIt);
                 aggVec.erase(aggVecIt);
             } else{
                 NS_LOG_INFO("Data name doesn't exist in map_agg_oldSeq_newName, meaning this data packet is duplicate, do nothing!");
@@ -723,10 +809,10 @@ Consumer::OnData(shared_ptr<const Data> data)
 
 
 
-            // Check whether aggregation round finished
+/*            // Check whether aggregation round finished
             if (vec.empty()) {
                 NS_LOG_DEBUG("Aggregation round finished. ");
-            }
+            }*/
 
             // Judge whether the aggregation iteration has finished
             if (aggVec.empty()) {
@@ -740,7 +826,7 @@ Consumer::OnData(shared_ptr<const Data> data)
                 if (aggregateStartTime.find(seq) != aggregateStartTime.end()) {
                     aggregateTime[seq] = ns3::Simulator::Now() - aggregateStartTime[seq];
                     AggregateTimeSum(aggregateTime[seq].GetMilliSeconds());
-                    NS_LOG_DEBUG("Iteration" << std::to_string(seq) << " aggregation time is: " << aggregateTime[seq].GetMilliSeconds() << " ms");
+                    NS_LOG_DEBUG("Iteration " << std::to_string(seq) << " aggregation time is: " << aggregateTime[seq].GetMilliSeconds() << " ms");
                     aggregateStartTime.erase(seq);
                 } else {
                     NS_LOG_DEBUG("Error when calculating aggregation time, no reference found for seq " << seq);
@@ -763,7 +849,20 @@ Consumer::OnData(shared_ptr<const Data> data)
 
     } else if (type == "initialization") {
         std::string destNode = data->getName().get(0).toUri();
-        NS_LOG_INFO("Node " << destNode << " has received aggregationTree map!");
+
+        // Update synchronization info
+        auto it = std::find(broadcastList.begin(), broadcastList.end(), destNode);
+        if (it != broadcastList.end()) {
+            broadcastList.erase(it);
+            NS_LOG_DEBUG("Node " << destNode << " has received aggregationTree map, erase it from broadcastList");
+        }
+
+        // Tree broadcasting synchronization is done
+        if (broadcastList.empty()) {
+            broadcastSync = true;
+            NS_LOG_DEBUG("Synchronization of tree broadcasting finished!");
+        }
+
     }
 }
 
@@ -774,16 +873,23 @@ Consumer::OnData(shared_ptr<const Data> data)
  * @param responseTime
  */
 void
-Consumer::RTTThresholdMeasure(int64_t responseTime)
+Consumer::RTTThresholdMeasure(int64_t responseTime, int index)
 {
-    RTT_threshold_vec.push_back(responseTime);
-    if (RTT_threshold_vec.size() == numChild) {
+    RTT_threshold_vec[index].push_back(responseTime);
+    if (RTT_threshold_vec[index].size() == globalTreeRound[index].size()) {
         int64_t sum = 0;
-        for (int64_t item: RTT_threshold_vec) {
+        for (int64_t item: RTT_threshold_vec[index]) {
             sum += item;
         }
-        RTT_threshold = 1.2 * (sum / numChild);
-        NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
+        RTT_threshold[index] = 1.2 * (sum / globalTreeRound[index].size());
+
+        if (RTT_threshold[index] != 0) {
+            NS_LOG_INFO("RTT_threshold of round " << index <<" is set as: " << RTT_threshold[index] << " ms");
+        } else {
+            NS_LOG_INFO("Error! RTT_threshold is set as 0, please check!");
+            ns3::Simulator::Stop();
+        }
+
     }
 }
 
@@ -804,7 +910,11 @@ Consumer::RTORecorder()
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMilliSeconds() << " " << RTO_Timer.GetMilliSeconds() << std::endl;
+    file << ns3::Simulator::Now().GetMilliSeconds();
+    for (const auto& timer : RTO_Timer) {
+        file << " " << timer.second;
+    }
+    file << std::endl;
 
     // Close the file
     file.close();
